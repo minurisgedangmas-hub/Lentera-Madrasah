@@ -1,0 +1,801 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Phase 3: Hardened Global Helpers
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Token-only admin check (safe inside allow list with zero get()/exists())
+    function isTokenAdmin() {
+      return isVerifiedEmail() && request.auth.token.email is string && request.auth.token.email.lower() == 'hagoyalitu@gmail.com';
+    }
+
+    // Full admin check for single-document operations
+    function isAdmin() {
+      return isTokenAdmin() || (
+        isVerifiedEmail() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isTeacher() {
+      return isVerifiedEmail() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'guru';
+    }
+
+    function emailKey() {
+      return request.auth.token.email.lower().replace('[^a-z0-9]', '_');
+    }
+
+    function matchesRoleInvite(data) {
+      return exists(/databases/$(database)/documents/roleInvites/$(emailKey())) &&
+        get(/databases/$(database)/documents/roleInvites/$(emailKey())).data.email.lower() == request.auth.token.email.lower() &&
+        data.role == get(/databases/$(database)/documents/roleInvites/$(emailKey())).data.role &&
+        data.linkedStudentIds == get(/databases/$(database)/documents/roleInvites/$(emailKey())).data.linkedStudentIds &&
+        data.classIds == get(/databases/$(database)/documents/roleInvites/$(emailKey())).data.classIds;
+    }
+
+    function roleToLabel(role) {
+      return role == 'admin' ? 'Admin' :
+             role == 'guru' ? 'Guru' :
+             role == 'siswa' ? 'Siswa' :
+             role == 'orangtua' ? 'Orang Tua' :
+             'Menunggu Verifikasi';
+    }
+
+    function matchesOwnUserRoleLabel(userId, label) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        roleToLabel(get(/databases/$(database)/documents/users/$(userId)).data.role) == label;
+    }
+
+    function isBoundedString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isBoundedStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= 128));
+    }
+
+    // =========================================================================
+    // Entity Validation Blueprints (Phase 4)
+    // =========================================================================
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'linkedStudentIds', 'classIds', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'linkedStudentIds', 'classIds', 'assignedSubjects', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isBoundedString(data.email, 3, 160) &&
+        isBoundedString(data.displayName, 1, 100) &&
+        data.role in ['admin', 'guru', 'siswa', 'orangtua', 'pending'] &&
+        isBoundedStringList(data.linkedStudentIds, 10) &&
+        isBoundedStringList(data.classIds, 15) &&
+        (!('assignedSubjects' in data) || isBoundedStringList(data.assignedSubjects, 20)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'roleLabel', 'departmentOrClass', 'isPublic', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'roleLabel', 'departmentOrClass', 'isPublic', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isBoundedString(data.displayName, 1, 100) &&
+        data.roleLabel in ['Admin', 'Guru', 'Siswa', 'Orang Tua', 'Menunggu Verifikasi'] &&
+        isBoundedString(data.departmentOrClass, 0, 80) &&
+        data.isPublic is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRoleInvite(data) {
+      return data.keys().hasAll(['email', 'role', 'displayName', 'linkedStudentIds', 'classIds', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['email', 'role', 'displayName', 'linkedStudentIds', 'classIds', 'assignedSubjects', 'createdBy', 'createdAt', 'updatedAt']) &&
+        isBoundedString(data.email, 3, 160) &&
+        data.role in ['guru', 'siswa', 'orangtua'] &&
+        isBoundedString(data.displayName, 1, 100) &&
+        isBoundedStringList(data.linkedStudentIds, 10) &&
+        isBoundedStringList(data.classIds, 15) &&
+        (!('assignedSubjects' in data) || isBoundedStringList(data.assignedSubjects, 20)) &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolClass(data) {
+      return data.keys().hasAll(['id', 'name', 'gradeLevel', 'homeroomTeacherUid', 'homeroomTeacherName', 'academicYear', 'isActive', 'subjects', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'gradeLevel', 'homeroomTeacherUid', 'homeroomTeacherName', 'academicYear', 'isActive', 'subjects', 'createdBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isBoundedString(data.name, 2, 60) &&
+        data.gradeLevel in ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'] &&
+        isValidId(data.homeroomTeacherUid) &&
+        isBoundedString(data.homeroomTeacherName, 1, 100) &&
+        isBoundedString(data.academicYear, 4, 20) &&
+        data.isActive is bool &&
+        isBoundedStringList(data.subjects, 20) &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['id', 'nisn', 'fullName', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'nisn', 'fullName', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'status', 'gender', 'birthPlace', 'birthDate', 'parentName', 'phone', 'address', 'entryType', 'entryDate', 'previousSchool', 'graduationYear', 'nextSchool', 'certificateNumber', 'createdBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.nisn) &&
+        data.nisn.size() >= 4 && data.nisn.size() <= 20 &&
+        isBoundedString(data.fullName, 2, 100) &&
+        isValidId(data.classId) &&
+        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.studentUid, 0, 128) &&
+        isBoundedStringList(data.parentUids, 4) &&
+        isBoundedStringList(data.teacherUids, 20) &&
+        (!('status' in data) || data.status in ['Aktif', 'Mutasi Keluar', 'Alumni']) &&
+        (!('gender' in data) || data.gender in ['Laki-laki', 'Perempuan']) &&
+        (!('birthPlace' in data) || isBoundedString(data.birthPlace, 0, 100)) &&
+        (!('birthDate' in data) || isBoundedString(data.birthDate, 0, 25)) &&
+        (!('parentName' in data) || isBoundedString(data.parentName, 0, 120)) &&
+        (!('phone' in data) || isBoundedString(data.phone, 0, 25)) &&
+        (!('address' in data) || isBoundedString(data.address, 0, 300)) &&
+        (!('entryType' in data) || data.entryType in ['Siswa Baru', 'Mutasi Masuk']) &&
+        (!('entryDate' in data) || isBoundedString(data.entryDate, 0, 25)) &&
+        (!('previousSchool' in data) || isBoundedString(data.previousSchool, 0, 140)) &&
+        (!('graduationYear' in data) || isBoundedString(data.graduationYear, 0, 12)) &&
+        (!('nextSchool' in data) || isBoundedString(data.nextSchool, 0, 140)) &&
+        (!('certificateNumber' in data) || isBoundedString(data.certificateNumber, 0, 60)) &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudentMutation(data) {
+      return data.keys().hasAll(['id', 'studentId', 'nisn', 'studentName', 'mutationType', 'mutationDate', 'classId', 'className', 'schoolOriginOrDestination', 'reason', 'letterNumber', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentId', 'nisn', 'studentName', 'mutationType', 'mutationDate', 'classId', 'className', 'schoolOriginOrDestination', 'reason', 'letterNumber', 'createdBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.studentId) &&
+        isValidId(data.nisn) &&
+        data.nisn.size() >= 4 && data.nisn.size() <= 20 &&
+        isBoundedString(data.studentName, 2, 100) &&
+        data.mutationType in ['Masuk', 'Keluar'] &&
+        data.mutationDate is string && data.mutationDate.size() == 10 && data.mutationDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        isValidId(data.classId) &&
+        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.schoolOriginOrDestination, 2, 140) &&
+        isBoundedString(data.reason, 0, 300) &&
+        isBoundedString(data.letterNumber, 0, 60) &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGrade(data) {
+      return data.keys().hasAll(['id', 'studentId', 'studentName', 'studentUid', 'parentUids', 'classId', 'className', 'subject', 'assessmentType', 'title', 'score', 'maxScore', 'notes', 'semester', 'teacherUid', 'teacherName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentId', 'studentName', 'studentUid', 'parentUids', 'classId', 'className', 'subject', 'assessmentType', 'title', 'score', 'maxScore', 'notes', 'semester', 'teacherUid', 'teacherName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.studentId) &&
+        isBoundedString(data.studentName, 2, 100) &&
+        isBoundedString(data.studentUid, 0, 128) &&
+        isBoundedStringList(data.parentUids, 4) &&
+        isValidId(data.classId) &&
+        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.subject, 2, 60) &&
+        data.assessmentType in ['Tugas', 'UH', 'UTS', 'UAS', 'Praktik'] &&
+        isBoundedString(data.title, 2, 120) &&
+        (data.score is int || data.score is float) && data.score >= 0 && data.score <= 100 &&
+        (data.maxScore is int || data.maxScore is float) && data.maxScore == 100 &&
+        isBoundedString(data.notes, 0, 400) &&
+        data.semester in ['Ganjil 2026/2027', 'Genap 2026/2027'] &&
+        isValidId(data.teacherUid) &&
+        isBoundedString(data.teacherName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['id', 'studentId', 'studentName', 'studentUid', 'parentUids', 'classId', 'className', 'date', 'status', 'notes', 'teacherUid', 'teacherName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentId', 'studentName', 'studentUid', 'parentUids', 'classId', 'className', 'date', 'status', 'notes', 'teacherUid', 'teacherName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.studentId) &&
+        isBoundedString(data.studentName, 2, 100) &&
+        isBoundedString(data.studentUid, 0, 128) &&
+        isBoundedStringList(data.parentUids, 4) &&
+        isValidId(data.classId) &&
+        isBoundedString(data.className, 2, 60) &&
+        data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        data.status in ['Hadir', 'Izin', 'Sakit', 'Alpha'] &&
+        isBoundedString(data.notes, 0, 300) &&
+        isValidId(data.teacherUid) &&
+        isBoundedString(data.teacherName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['id', 'title', 'content', 'category', 'targetAudience', 'eventDate', 'location', 'isPinned', 'isPublished', 'authorUid', 'authorName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'content', 'category', 'targetAudience', 'eventDate', 'location', 'driveUrl', 'isPinned', 'isPublished', 'authorUid', 'authorName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isBoundedString(data.title, 3, 140) &&
+        isBoundedString(data.content, 5, 2000) &&
+        data.category in ['Akademik', 'Kegiatan', 'Ujian', 'Libur', 'Umum'] &&
+        data.targetAudience in ['Semua', 'Guru', 'Siswa', 'Orang Tua'] &&
+        isBoundedString(data.eventDate, 0, 20) &&
+        isBoundedString(data.location, 0, 120) &&
+        (!('driveUrl' in data) || (data.driveUrl is string && data.driveUrl.size() <= 500 && (data.driveUrl.size() == 0 || data.driveUrl.matches('^https://.*')))) &&
+        data.isPinned is bool &&
+        data.isPublished is bool &&
+        isValidId(data.authorUid) &&
+        isBoundedString(data.authorName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'recipientUid', 'isBroadcast', 'type', 'title', 'message', 'studentId', 'studentName', 'relatedId', 'isRead', 'readByUids', 'senderUid', 'senderName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'recipientUid', 'isBroadcast', 'type', 'title', 'message', 'studentId', 'studentName', 'relatedId', 'isRead', 'readByUids', 'senderUid', 'senderName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isBoundedString(data.recipientUid, 1, 128) &&
+        data.isBroadcast is bool &&
+        data.type in ['nilai', 'absensi', 'pengumuman'] &&
+        isBoundedString(data.title, 2, 140) &&
+        isBoundedString(data.message, 2, 400) &&
+        isBoundedString(data.studentId, 0, 128) &&
+        isBoundedString(data.studentName, 0, 100) &&
+        isBoundedString(data.relatedId, 1, 128) &&
+        data.isRead is bool &&
+        isBoundedStringList(data.readByUids, 100) &&
+        isValidId(data.senderUid) &&
+        isBoundedString(data.senderName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMadrasahIdentity(data) {
+      return data.keys().hasAll(['id', 'namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'isPublic', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'logoUrl', 'jadwalPelajaranUrl', 'absensiReportUrl', 'isPublic', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        data.id == 'main' &&
+        isBoundedString(data.namaYayasan, 2, 140) &&
+        isBoundedString(data.namaMadrasah, 2, 140) &&
+        isBoundedString(data.nsm, 4, 30) &&
+        isBoundedString(data.npsn, 4, 20) &&
+        data.statusAkreditasi in ['A', 'B', 'C', 'Belum Terakreditasi'] &&
+        isBoundedString(data.alamat, 5, 300) &&
+        data.tahunBerdiri is string && data.tahunBerdiri.size() == 4 && data.tahunBerdiri.matches('^[0-9]{4}$') &&
+        isBoundedString(data.namaKepalaMadrasah, 2, 120) &&
+        (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 500 && (data.logoUrl.size() == 0 || data.logoUrl.matches('^https://.*')))) &&
+        (!('jadwalPelajaranUrl' in data) || (data.jadwalPelajaranUrl is string && data.jadwalPelajaranUrl.size() <= 500 && (data.jadwalPelajaranUrl.size() == 0 || data.jadwalPelajaranUrl.matches('^https://.*')))) &&
+        (!('absensiReportUrl' in data) || (data.absensiReportUrl is string && data.absensiReportUrl.size() <= 500 && (data.absensiReportUrl.size() == 0 || data.absensiReportUrl.matches('^https://.*')))) &&
+        data.isPublic is bool &&
+        isValidId(data.updatedBy) &&
+        isBoundedString(data.updatedByName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTeacher(data) {
+      return data.keys().hasAll(['id', 'orderNo', 'fullName', 'birthPlace', 'birthDate', 'gender', 'nuptkNpkPegId', 'tmt', 'position', 'phone', 'address', 'isActive', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'orderNo', 'fullName', 'birthPlace', 'birthDate', 'gender', 'nuptkNpkPegId', 'tmt', 'position', 'phone', 'address', 'isActive', 'createdBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.orderNo is int && data.orderNo >= 0 && data.orderNo <= 99999 &&
+        isBoundedString(data.fullName, 2, 100) &&
+        isBoundedString(data.birthPlace, 0, 100) &&
+        isBoundedString(data.birthDate, 0, 25) &&
+        data.gender in ['Laki-laki', 'Perempuan'] &&
+        isBoundedString(data.nuptkNpkPegId, 0, 50) &&
+        isBoundedString(data.tmt, 0, 25) &&
+        isBoundedString(data.position, 1, 100) &&
+        isBoundedString(data.phone, 0, 25) &&
+        isBoundedString(data.address, 0, 300) &&
+        data.isActive is bool &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFinanceTransaction(data) {
+      return data.keys().hasAll(['id', 'category', 'classLevel', 'transactionType', 'amount', 'transactionDate', 'studentId', 'studentName', 'title', 'paymentStatus', 'notes', 'createdBy', 'createdByName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'category', 'classLevel', 'transactionType', 'amount', 'transactionDate', 'studentId', 'studentName', 'title', 'paymentStatus', 'notes', 'createdBy', 'createdByName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.category in ['kas_kelas', 'tabungan_siswa', 'tabungan_wajib_6', 'pembayaran_kursus', 'ekstra_pramuka'] &&
+        data.classLevel in ['Kelas 1', 'Kelas 2', 'Kelas 3', 'Kelas 4', 'Kelas 5', 'Kelas 6', 'Umum'] &&
+        data.transactionType in ['Masuk', 'Keluar'] &&
+        (data.amount is int || data.amount is float) && data.amount > 0 && data.amount <= 1000000000 &&
+        data.transactionDate is string && data.transactionDate.size() == 10 && data.transactionDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        isBoundedString(data.studentId, 0, 128) &&
+        isBoundedString(data.studentName, 0, 100) &&
+        isBoundedString(data.title, 2, 140) &&
+        data.paymentStatus in ['Lunas', 'Cicilan', 'Belum Lunas', ''] &&
+        isBoundedString(data.notes, 0, 300) &&
+        isValidId(data.createdBy) &&
+        isBoundedString(data.createdByName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAttendanceReportLink(data) {
+      return data.keys().hasAll(['id', 'classLevel', 'rombel', 'reportUrl', 'isPublic', 'createdBy', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'classLevel', 'rombel', 'reportUrl', 'isPublic', 'createdBy', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.classLevel in ['Kelas 1', 'Kelas 2', 'Kelas 3', 'Kelas 4', 'Kelas 5', 'Kelas 6'] &&
+        isBoundedString(data.rombel, 1, 40) &&
+        data.reportUrl is string && data.reportUrl.size() >= 10 && data.reportUrl.size() <= 500 && data.reportUrl.matches('^https://.*') &&
+        data.isPublic is bool &&
+        isValidId(data.createdBy) &&
+        isValidId(data.updatedBy) &&
+        isBoundedString(data.updatedByName, 1, 100) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    match /madrasahProfile/{profileId} {
+      allow get: if isValidId(profileId) && profileId == 'main' && (resource == null || existing().isPublic == true || isAdmin());
+      allow list: if isTokenAdmin() || (isSignedIn() && resource.data.isPublic == true);
+      allow create: if isValidId(profileId) &&
+        profileId == 'main' &&
+        isAdmin() &&
+        isValidMadrasahIdentity(incoming()) &&
+        incoming().id == profileId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(profileId) &&
+        profileId == 'main' &&
+        isAdmin() &&
+        isValidMadrasahIdentity(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'logoUrl', 'jadwalPelajaranUrl', 'absensiReportUrl', 'isPublic', 'updatedBy', 'updatedByName', 'updatedAt']);
+      allow delete: if isValidId(profileId) && isAdmin();
+    }
+
+    match /teachers/{teacherId} {
+      allow get: if isValidId(teacherId) && isAdmin();
+      allow list: if isTokenAdmin();
+      allow create: if isValidId(teacherId) &&
+        isAdmin() &&
+        isValidTeacher(incoming()) &&
+        incoming().id == teacherId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(teacherId) &&
+        isAdmin() &&
+        isValidTeacher(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['orderNo', 'fullName', 'birthPlace', 'birthDate', 'gender', 'nuptkNpkPegId', 'tmt', 'position', 'phone', 'address', 'isActive', 'updatedAt']);
+      allow delete: if isValidId(teacherId) && isAdmin();
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isTokenAdmin();
+      allow create, update, delete: if isValidId(adminId) && isTokenAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isTokenAdmin();
+      allow create: if isValidId(userId) &&
+        isVerifiedEmail() &&
+        isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == userId &&
+        incoming().email.lower() == request.auth.token.email.lower() &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          (isTokenAdmin() && incoming().role == 'admin') ||
+          matchesRoleInvite(incoming()) ||
+          (incoming().role == 'pending' && incoming().linkedStudentIds.size() == 0 && incoming().classIds.size() == 0)
+        );
+      allow update: if isValidId(userId) &&
+        isVerifiedEmail() &&
+        isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            matchesRoleInvite(incoming()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['role', 'linkedStudentIds', 'classIds', 'assignedSubjects', 'updatedAt'])
+          ) ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().linkedStudentIds == existing().linkedStudentIds &&
+            incoming().classIds == existing().classIds &&
+            (!('assignedSubjects' in existing()) || incoming().assignedSubjects == existing().assignedSubjects) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /publicProfiles/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (resource == null || existing().isPublic == true);
+      allow list: if isSignedIn() && resource.data.isPublic == true;
+      allow create: if isValidId(userId) &&
+        isVerifiedEmail() &&
+        isValidPublicProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().isPublic == true &&
+            (
+              incoming().roleLabel == 'Menunggu Verifikasi' ||
+              matchesOwnUserRoleLabel(userId, incoming().roleLabel)
+            )
+          )
+        );
+      allow update: if isValidId(userId) &&
+        isVerifiedEmail() &&
+        isValidPublicProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().isPublic == existing().isPublic &&
+            incoming().departmentOrClass == existing().departmentOrClass &&
+            matchesOwnUserRoleLabel(userId, incoming().roleLabel) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'roleLabel', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /roleInvites/{inviteId} {
+      allow get: if isValidId(inviteId) && isVerifiedEmail() && (isAdmin() || resource == null || existing().email.lower() == request.auth.token.email.lower());
+      allow list: if isVerifiedEmail() && (isTokenAdmin() || resource.data.email == request.auth.token.email);
+      allow create: if isValidId(inviteId) &&
+        isAdmin() &&
+        isValidRoleInvite(incoming()) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(inviteId) &&
+        isAdmin() &&
+        isValidRoleInvite(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['role', 'displayName', 'linkedStudentIds', 'classIds', 'assignedSubjects', 'updatedAt']);
+      allow delete: if isValidId(inviteId) && isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow get: if isValidId(classId) && isSignedIn();
+      allow list: if isTokenAdmin() || (isSignedIn() && resource.data.isActive == true);
+      allow create: if isValidId(classId) &&
+        isVerifiedEmail() &&
+        isValidSchoolClass(incoming()) &&
+        incoming().id == classId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher());
+      allow update: if isValidId(classId) &&
+        isVerifiedEmail() &&
+        isValidSchoolClass(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (isTeacher() && (existing().homeroomTeacherUid == request.auth.uid || existing().createdBy == request.auth.uid))
+        ) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'gradeLevel', 'homeroomTeacherUid', 'homeroomTeacherName', 'academicYear', 'isActive', 'subjects', 'updatedAt']);
+      allow delete: if isValidId(classId) && (isAdmin() || (isTeacher() && existing().createdBy == request.auth.uid));
+    }
+
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && isSignedIn() && (
+        isAdmin() ||
+        isTeacher() ||
+        existing().studentUid == request.auth.uid ||
+        (request.auth.uid in existing().parentUids)
+      );
+      allow list: if isSignedIn() && (
+        isTokenAdmin() ||
+        resource.data.studentUid == request.auth.uid ||
+        (request.auth.uid in resource.data.parentUids) ||
+        (request.auth.uid in resource.data.teacherUids) ||
+        resource.data.createdBy == request.auth.uid
+      );
+      allow create: if isValidId(studentId) &&
+        isVerifiedEmail() &&
+        isValidStudent(incoming()) &&
+        incoming().id == studentId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher()) &&
+        exists(/databases/$(database)/documents/classes/$(incoming().classId));
+      allow update: if isValidId(studentId) &&
+        isVerifiedEmail() &&
+        isValidStudent(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (isTeacher() && (existing().createdBy == request.auth.uid || (request.auth.uid in existing().teacherUids)))
+        ) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['nisn', 'fullName', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'status', 'gender', 'birthPlace', 'birthDate', 'parentName', 'phone', 'address', 'entryType', 'entryDate', 'previousSchool', 'graduationYear', 'nextSchool', 'certificateNumber', 'updatedAt']);
+      allow delete: if isValidId(studentId) && isAdmin();
+    }
+
+    match /studentMutations/{mutationId} {
+      allow get: if isValidId(mutationId) && isSignedIn() && (isAdmin() || isTeacher());
+      allow list: if isSignedIn() && (isTokenAdmin() || resource.data.createdBy == request.auth.uid);
+      allow create: if isValidId(mutationId) &&
+        isVerifiedEmail() &&
+        isValidStudentMutation(incoming()) &&
+        incoming().id == mutationId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher()) &&
+        exists(/databases/$(database)/documents/classes/$(incoming().classId));
+      allow update: if isValidId(mutationId) &&
+        isVerifiedEmail() &&
+        isValidStudentMutation(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().studentId == existing().studentId &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || existing().createdBy == request.auth.uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['mutationDate', 'schoolOriginOrDestination', 'reason', 'letterNumber', 'updatedAt']);
+      allow delete: if isValidId(mutationId) && (isAdmin() || existing().createdBy == request.auth.uid);
+    }
+
+    match /grades/{gradeId} {
+      allow get: if isValidId(gradeId) && isSignedIn() && (
+        isAdmin() ||
+        existing().teacherUid == request.auth.uid ||
+        existing().studentUid == request.auth.uid ||
+        (request.auth.uid in existing().parentUids)
+      );
+      allow list: if isSignedIn() && (
+        isTokenAdmin() ||
+        resource.data.teacherUid == request.auth.uid ||
+        resource.data.studentUid == request.auth.uid ||
+        (request.auth.uid in resource.data.parentUids)
+      );
+      allow create: if isValidId(gradeId) &&
+        isVerifiedEmail() &&
+        isValidGrade(incoming()) &&
+        incoming().id == gradeId &&
+        incoming().teacherUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher()) &&
+        exists(/databases/$(database)/documents/students/$(incoming().studentId));
+      allow update: if isValidId(gradeId) &&
+        isVerifiedEmail() &&
+        isValidGrade(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().studentId == existing().studentId &&
+        incoming().teacherUid == existing().teacherUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || existing().teacherUid == request.auth.uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['subject', 'assessmentType', 'title', 'score', 'notes', 'semester', 'studentUid', 'parentUids', 'updatedAt']);
+      allow delete: if isValidId(gradeId) && (isAdmin() || existing().teacherUid == request.auth.uid);
+    }
+
+    match /attendance/{attendanceId} {
+      allow get: if isValidId(attendanceId) && isSignedIn() && (
+        isAdmin() ||
+        existing().teacherUid == request.auth.uid ||
+        existing().studentUid == request.auth.uid ||
+        (request.auth.uid in existing().parentUids)
+      );
+      allow list: if isSignedIn() && (
+        isTokenAdmin() ||
+        resource.data.teacherUid == request.auth.uid ||
+        resource.data.studentUid == request.auth.uid ||
+        (request.auth.uid in resource.data.parentUids)
+      );
+      allow create: if isValidId(attendanceId) &&
+        isVerifiedEmail() &&
+        isValidAttendance(incoming()) &&
+        incoming().id == attendanceId &&
+        incoming().teacherUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher()) &&
+        exists(/databases/$(database)/documents/students/$(incoming().studentId));
+      allow update: if isValidId(attendanceId) &&
+        isVerifiedEmail() &&
+        isValidAttendance(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().studentId == existing().studentId &&
+        incoming().teacherUid == existing().teacherUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || existing().teacherUid == request.auth.uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'date', 'studentUid', 'parentUids', 'updatedAt']);
+      allow delete: if isValidId(attendanceId) && (isAdmin() || existing().teacherUid == request.auth.uid);
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isValidId(announcementId) && (
+        existing().isPublished == true ||
+        (isSignedIn() && (isAdmin() || existing().authorUid == request.auth.uid))
+      );
+      allow list: if (
+        resource.data.isPublished == true ||
+        (isSignedIn() && (isTokenAdmin() || resource.data.authorUid == request.auth.uid))
+      );
+      allow create: if isValidId(announcementId) &&
+        isVerifiedEmail() &&
+        isValidAnnouncement(incoming()) &&
+        incoming().id == announcementId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher());
+      allow update: if isValidId(announcementId) &&
+        isVerifiedEmail() &&
+        isValidAnnouncement(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || existing().authorUid == request.auth.uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'category', 'targetAudience', 'eventDate', 'location', 'driveUrl', 'isPinned', 'isPublished', 'updatedAt']);
+      allow delete: if isValidId(announcementId) && (isAdmin() || existing().authorUid == request.auth.uid);
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (
+        isAdmin() ||
+        existing().recipientUid == request.auth.uid ||
+        existing().senderUid == request.auth.uid ||
+        existing().isBroadcast == true
+      );
+      allow list: if isSignedIn() && (
+        isTokenAdmin() ||
+        resource.data.recipientUid == request.auth.uid ||
+        resource.data.senderUid == request.auth.uid ||
+        resource.data.isBroadcast == true
+      );
+      allow create: if isValidId(notificationId) &&
+        isVerifiedEmail() &&
+        isValidNotification(incoming()) &&
+        incoming().id == notificationId &&
+        incoming().senderUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher());
+      allow update: if isValidId(notificationId) &&
+        isVerifiedEmail() &&
+        isValidNotification(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().senderUid == existing().senderUid &&
+        incoming().recipientUid == existing().recipientUid &&
+        incoming().isBroadcast == existing().isBroadcast &&
+        incoming().type == existing().type &&
+        incoming().relatedId == existing().relatedId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'readByUids', 'updatedAt'])
+          ) ||
+          (
+            existing().recipientUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'updatedAt'])
+          ) ||
+          (
+            existing().isBroadcast == true &&
+            incoming().isRead == existing().isRead &&
+            (request.auth.uid in incoming().readByUids) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['readByUids', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(notificationId) && (isAdmin() || existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid);
+    }
+
+    match /financeTransactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (isAdmin() || (isTeacher() && existing().createdBy == request.auth.uid));
+      allow list: if isSignedIn() && (isTokenAdmin() || resource.data.createdBy == request.auth.uid);
+      allow create: if isValidId(transactionId) &&
+        isVerifiedEmail() &&
+        isValidFinanceTransaction(incoming()) &&
+        incoming().id == transactionId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher());
+      allow update: if isValidId(transactionId) &&
+        isVerifiedEmail() &&
+        isValidFinanceTransaction(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().category == existing().category &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (isTeacher() && existing().createdBy == request.auth.uid)) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['classLevel', 'transactionType', 'amount', 'transactionDate', 'studentId', 'studentName', 'title', 'paymentStatus', 'notes', 'updatedAt']);
+      allow delete: if isValidId(transactionId) && (isAdmin() || (isTeacher() && existing().createdBy == request.auth.uid));
+    }
+
+    match /attendanceReportLinks/{linkId} {
+      allow get: if isValidId(linkId) && (
+        existing().isPublic == true ||
+        (isSignedIn() && (isAdmin() || isTeacher()))
+      );
+      allow list: if (
+        resource.data.isPublic == true ||
+        (isSignedIn() && isTokenAdmin())
+      );
+      allow create: if isValidId(linkId) &&
+        isVerifiedEmail() &&
+        isValidAttendanceReportLink(incoming()) &&
+        incoming().id == linkId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || isTeacher());
+      allow update: if isValidId(linkId) &&
+        isVerifiedEmail() &&
+        isValidAttendanceReportLink(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (isTeacher() && existing().createdBy == request.auth.uid)) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['classLevel', 'rombel', 'reportUrl', 'isPublic', 'updatedBy', 'updatedByName', 'updatedAt']);
+      allow delete: if isValidId(linkId) && (isAdmin() || (isTeacher() && existing().createdBy == request.auth.uid));
+    }
+  }
+}

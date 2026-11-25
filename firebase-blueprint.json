@@ -1,0 +1,1053 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Private user account profile containing RBAC role and PII email.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "Verified Google account email"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Full display name"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "guru", "siswa", "orangtua", "pending"],
+          "description": "Server-validated user role"
+        },
+        "linkedStudentIds": {
+          "type": "array",
+          "description": "Bounded list of linked student IDs (max 10)"
+        },
+        "classIds": {
+          "type": "array",
+          "description": "Bounded list of assigned class IDs (max 15)"
+        },
+        "assignedSubjects": {
+          "type": "array",
+          "description": "Bounded list of subjects assigned to teacher (max 20)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": ["uid", "email", "displayName", "role", "linkedStudentIds", "classIds", "createdAt", "updatedAt"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Non-PII school directory entry for teachers, students, and parents.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "roleLabel": {
+          "type": "string",
+          "enum": ["Admin", "Guru", "Siswa", "Orang Tua", "Menunggu Verifikasi"]
+        },
+        "departmentOrClass": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "roleLabel", "departmentOrClass", "isPublic", "updatedAt"]
+    },
+    "RoleInvite": {
+      "title": "RoleInvite",
+      "description": "Admin-created role assignment invitation keyed by normalized email.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "role": {
+          "type": "string",
+          "enum": ["guru", "siswa", "orangtua"]
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "linkedStudentIds": {
+          "type": "array"
+        },
+        "classIds": {
+          "type": "array"
+        },
+        "assignedSubjects": {
+          "type": "array"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "role", "displayName", "linkedStudentIds", "classIds", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SchoolClass": {
+      "title": "SchoolClass",
+      "description": "Academic class room and subject schedule configuration.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "gradeLevel": {
+          "type": "string",
+          "enum": ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+        },
+        "homeroomTeacherUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "homeroomTeacherName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "academicYear": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "subjects": {
+          "type": "array"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "gradeLevel", "homeroomTeacherUid", "homeroomTeacherName", "academicYear", "isActive", "subjects", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Enrolled student academic record linked to class, teachers, student account, and parents.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nisn": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "classId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "studentUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "parentUids": {
+          "type": "array"
+        },
+        "teacherUids": {
+          "type": "array"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Aktif", "Mutasi Keluar", "Alumni"]
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["Laki-laki", "Perempuan"]
+        },
+        "birthPlace": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "birthDate": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "parentName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "entryType": {
+          "type": "string",
+          "enum": ["Siswa Baru", "Mutasi Masuk"]
+        },
+        "entryDate": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "previousSchool": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "graduationYear": {
+          "type": "string",
+          "maxLength": 12
+        },
+        "nextSchool": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "certificateNumber": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "nisn", "fullName", "classId", "className", "studentUid", "parentUids", "teacherUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Grade": {
+      "title": "Grade",
+      "description": "Subject assessment score recorded by a teacher for a student.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "studentUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "parentUids": {
+          "type": "array"
+        },
+        "classId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "assessmentType": {
+          "type": "string",
+          "enum": ["Tugas", "UH", "UTS", "UAS", "Praktik"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "score": {
+          "type": "number"
+        },
+        "maxScore": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "semester": {
+          "type": "string",
+          "enum": ["Ganjil 2026/2027", "Genap 2026/2027"]
+        },
+        "teacherUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "teacherName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "studentId", "studentName", "studentUid", "parentUids", "classId", "className", "subject", "assessmentType", "title", "score", "maxScore", "notes", "semester", "teacherUid", "teacherName", "createdAt", "updatedAt"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance entry for a student recorded by a teacher.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "studentUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "parentUids": {
+          "type": "array"
+        },
+        "classId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Hadir", "Izin", "Sakit", "Alpha"]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "teacherUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "teacherName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "studentId", "studentName", "studentUid", "parentUids", "classId", "className", "date", "status", "notes", "teacherUid", "teacherName", "createdAt", "updatedAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "School activity announcement published by admin or teacher.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "content": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 2000
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Akademik", "Kegiatan", "Ujian", "Libur", "Umum"]
+        },
+        "targetAudience": {
+          "type": "string",
+          "enum": ["Semua", "Guru", "Siswa", "Orang Tua"]
+        },
+        "eventDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "driveUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional Google Drive or HTTPS URL for attached schedule or document"
+        },
+        "isPinned": {
+          "type": "boolean"
+        },
+        "isPublished": {
+          "type": "boolean"
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "content", "category", "targetAudience", "eventDate", "location", "isPinned", "isPublished", "authorUid", "authorName", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real-time notification event for grades, attendance, or school announcements.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "isBroadcast": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["nilai", "absensi", "pengumuman"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "message": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 400
+        },
+        "studentId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "studentName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "relatedId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "isRead": {
+          "type": "boolean"
+        },
+        "readByUids": {
+          "type": "array"
+        },
+        "senderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "recipientUid", "isBroadcast", "type", "title", "message", "studentId", "studentName", "relatedId", "isRead", "readByUids", "senderUid", "senderName", "createdAt", "updatedAt"]
+    },
+    "MadrasahIdentity": {
+      "title": "MadrasahIdentity",
+      "description": "Official institutional profile of the Madrasah Ibtidaiyah (MI) including foundation, NSM, NPSN, accreditation, address, founding year, and headmaster.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "namaYayasan": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "namaMadrasah": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "nsm": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 30
+        },
+        "npsn": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "statusAkreditasi": {
+          "type": "string",
+          "enum": ["A", "B", "C", "Belum Terakreditasi"]
+        },
+        "alamat": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 300
+        },
+        "tahunBerdiri": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4,
+          "pattern": "^[0-9]{4}$"
+        },
+        "namaKepalaMadrasah": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "logoUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional Google Drive or HTTPS image URL for the official Madrasah logo"
+        },
+        "jadwalPelajaranUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional Google Drive or HTTPS URL for the Madrasah class schedule (Jadwal Pelajaran)"
+        },
+        "absensiReportUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional HTTPS URL for external Madrasah attendance report preview"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "namaYayasan", "namaMadrasah", "nsm", "npsn", "statusAkreditasi", "alamat", "tahunBerdiri", "namaKepalaMadrasah", "isPublic", "updatedBy", "updatedByName", "createdAt", "updatedAt"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Madrasah teacher and staff personnel record imported via Excel or entered manually by admin.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderNo": {
+          "type": "integer",
+          "description": "Sequential row number (No.)"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "birthPlace": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "birthDate": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["Laki-laki", "Perempuan"]
+        },
+        "nuptkNpkPegId": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "tmt": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "position": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "orderNo", "fullName", "birthPlace", "birthDate", "gender", "nuptkNpkPegId", "tmt", "position", "phone", "address", "isActive", "createdBy", "createdAt", "updatedAt"]
+    },
+    "StudentMutation": {
+      "title": "StudentMutation",
+      "description": "Transfer-in and transfer-out (Mutasi Masuk / Keluar) audit record for MI students.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nisn": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "mutationType": {
+          "type": "string",
+          "enum": ["Masuk", "Keluar"]
+        },
+        "mutationDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "classId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "schoolOriginOrDestination": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "letterNumber": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "studentId", "nisn", "studentName", "mutationType", "mutationDate", "classId", "className", "schoolOriginOrDestination", "reason", "letterNumber", "createdBy", "createdAt", "updatedAt"]
+    },
+    "FinanceTransaction": {
+      "title": "FinanceTransaction",
+      "description": "Madrasah financial ledger entry covering Class KAS 1-6, Student Savings 1-6, Class 6 Mandatory Savings, Course Payments, and Pramuka Extracurricular funds.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["kas_kelas", "tabungan_siswa", "tabungan_wajib_6", "pembayaran_kursus", "ekstra_pramuka"]
+        },
+        "classLevel": {
+          "type": "string",
+          "enum": ["Kelas 1", "Kelas 2", "Kelas 3", "Kelas 4", "Kelas 5", "Kelas 6", "Umum"]
+        },
+        "transactionType": {
+          "type": "string",
+          "enum": ["Masuk", "Keluar"]
+        },
+        "amount": {
+          "type": "number"
+        },
+        "transactionDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "studentId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "studentName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["Lunas", "Cicilan", "Belum Lunas", ""]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "category", "classLevel", "transactionType", "amount", "transactionDate", "studentId", "studentName", "title", "paymentStatus", "notes", "createdBy", "createdByName", "createdAt", "updatedAt"]
+    },
+    "AttendanceReportLink": {
+      "title": "AttendanceReportLink",
+      "description": "External attendance report URL configured per Madrasah class level and rombel for public and portal preview.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "classLevel": {
+          "type": "string",
+          "enum": ["Kelas 1", "Kelas 2", "Kelas 3", "Kelas 4", "Kelas 5", "Kelas 6"]
+        },
+        "rombel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "reportUrl": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 500,
+          "description": "HTTPS URL for external attendance report preview"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "classLevel", "rombel", "reportUrl", "isPublic", "createdBy", "updatedBy", "updatedByName", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/madrasahProfile/{profileId}": {
+      "schema": { "$ref": "#/entities/MadrasahIdentity" },
+      "description": "Official institutional profile of the Madrasah Ibtidaiyah (MI)"
+    },
+    "/attendanceReportLinks/{linkId}": {
+      "schema": { "$ref": "#/entities/AttendanceReportLink" },
+      "description": "External attendance report links separated by class level (Kelas 1-6) and rombel"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private user account profiles with RBAC role and PII email"
+    },
+    "/publicProfiles/{userId}": {
+      "schema": { "$ref": "#/entities/PublicProfile" },
+      "description": "Non-PII school directory profiles"
+    },
+    "/roleInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/RoleInvite" },
+      "description": "Admin-managed role assignment invitations"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/SchoolClass" },
+      "description": "School class configurations"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Student roster records linked to classes and parent/student UIDs"
+    },
+    "/grades/{gradeId}": {
+      "schema": { "$ref": "#/entities/Grade" },
+      "description": "Student assessment grades"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/Attendance" },
+      "description": "Daily student attendance records"
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "School activity announcements"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Real-time notifications for grades, attendance, and announcements"
+    },
+    "/teachers/{teacherId}": {
+      "schema": { "$ref": "#/entities/Teacher" },
+      "description": "Madrasah teacher and staff personnel directory (PII restricted to admin)"
+    },
+    "/studentMutations/{mutationId}": {
+      "schema": { "$ref": "#/entities/StudentMutation" },
+      "description": "Student transfer-in and transfer-out (mutasi) history logs"
+    },
+    "/financeTransactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/FinanceTransaction" },
+      "description": "Madrasah financial ledger records (KAS Kelas 1-6, Tabungan Siswa 1-6, Tabungan Wajib Kelas 6, Pembayaran Kursus, Ekstra Pramuka)"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Lentera Madrasah",
+  "description": "Portal akademik Madrasah Ibtidaiyah (MI) gratis yang menghubungkan guru, siswa, dan orang tua murid dengan notifikasi real-time untuk nilai, absensi, dan pengumuman kegiatan madrasah.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
