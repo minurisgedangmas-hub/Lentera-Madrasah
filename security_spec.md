@@ -6,6 +6,7 @@
 3. **Referential Integrity Invariant**: Every `Grade` and `Attendance` record must reference an existing `/students/{studentId}` document and carry an immutable `teacherUid` matching `request.auth.uid` on creation.
 4. **Temporal & Volumetric Invariant**: Every `create` requires `createdAt == request.time && updatedAt == request.time`, every `update` preserves `createdAt` and sets `updatedAt == request.time`, and every string/array field enforces strict `.size()` bounds.
 5. **Query Security Invariant**: Every `allow list` rule evaluates `resource.data` directly against `request.auth.uid` or `isTokenAdmin()` with zero `get()` or `exists()` lookups.
+6. **Correspondence & Administration Invariant**: `outgoingMails/{mailId}` is restricted to verified Admins and Teachers; non-admin teachers can only read, create, update, or delete letters they created (`createdBy == request.auth.uid`), with immutable `id`/`createdBy`/`createdAt` and strict HTTPS URL enforcement on optional `driveUrl`.
 
 ## 2. The "Dirty Dozen" Payloads (Adversarial Security Test Cases)
 1. **Self-Assigned Admin Escalation**: Non-admin creates `users/attacker` with `{ "role": "admin" }`. -> **MUST DENY**.

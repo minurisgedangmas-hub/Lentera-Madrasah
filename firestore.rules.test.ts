@@ -163,8 +163,23 @@ export const dirtyDozenPayloads: DirtyDozenCase[] = [
     },
     expected: 'PERMISSION_DENIED',
   },
+  {
+    id: 13,
+    name: 'Outgoing Mail Spoofing / Invalid URL Injection',
+    collection: 'outgoingMails/mail_spoof',
+    operation: 'create',
+    actor: { uid: 'student_uid', email: 'siswa@sekolah.id', email_verified: true, role: 'siswa' },
+    payload: {
+      id: 'mail_spoof',
+      category: 'surat_keterangan',
+      letterNumber: '001/SK/2026',
+      driveUrl: 'javascript:alert(1)',
+      createdBy: 'teacher_uid',
+    },
+    expected: 'PERMISSION_DENIED',
+  },
 ];
 
 export function assertSpecCompleteness() {
-  assert.equal(dirtyDozenPayloads.length, 12);
+  assert.ok(dirtyDozenPayloads.length >= 12);
 }

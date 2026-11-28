@@ -310,5 +310,38 @@ export interface AttendanceReportLink {
   updatedAt: Timestamp;
 }
 
+export type OutgoingMailCategory =
+  | 'surat_keterangan'
+  | 'undangan'
+  | 'pemberitahuan'
+  | 'surat_mutasi'
+  | 'surat_lainnya';
+
+export type OutgoingMailPriority = 'Biasa' | 'Penting' | 'Segera' | 'Rahasia';
+
+export type OutgoingMailStatus = 'Draf' | 'Terbit' | 'Terkirim' | 'Diarsipkan';
+
+export interface OutgoingMailRecord {
+  id: string;
+  category: OutgoingMailCategory;
+  letterNumber: string;
+  letterDate: string;
+  subject: string;
+  recipient: string;
+  priority: OutgoingMailPriority;
+  attachmentCount: string;
+  studentId: string;
+  studentName: string;
+  content: string;
+  signerName: string;
+  signerTitle: string;
+  status: OutgoingMailStatus;
+  driveUrl?: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 
 

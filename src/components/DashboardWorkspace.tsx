@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bell,
   BookOpenCheck,
@@ -8,13 +8,16 @@ import {
   Compass,
   Database,
   ExternalLink,
+  FolderKanban,
   GraduationCap,
   Landmark,
   LayoutDashboard,
   LogOut,
+  Mail,
   Megaphone,
   Menu,
   PiggyBank,
+  Send,
   Shield,
   ShieldCheck,
   Users,
@@ -25,6 +28,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSchoolData } from '../hooks/useSchoolData';
 import { seedSampleSchoolData } from '../services/schoolService';
 import { FinanceClassLevel, MadrasahIdentity, PortalPreviewMode } from '../types/school';
+import {
+  AdministrationMailView,
+  AdministrasiSubmenu,
+  SURAT_KELUAR_CATEGORIES,
+  SuratKeluarCategoryFilter,
+  SuratMenyuratSubmenu,
+} from './AdministrationMailView';
 import { AdminManagementView } from './AdminManagementView';
 import { AnnouncementsView } from './AnnouncementsView';
 import {
@@ -52,6 +62,7 @@ type NavTab =
   | 'data_siswa'
   | 'absensi'
   | 'keuangan'
+  | 'administrasi'
   | 'pengumuman'
   | 'notifikasi'
   | 'admin';
@@ -109,19 +120,55 @@ export function DashboardWorkspace() {
     teachers,
     studentMutations,
     financeTransactions,
+    outgoingMails,
     attendanceReportLinks,
     loading,
     latestToast,
     dismissToast,
   } = useSchoolData();
 
-  const [activeTab, setActiveTab] = useState<NavTab>('pengumuman');
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    if (typeof window !== 'undefined') {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam === 'notifikasi') return 'notifikasi';
+    }
+    return 'pengumuman';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('tab') === 'notifikasi') {
+      setActiveTab('notifikasi');
+      url.searchParams.delete('tab');
+      window.history.replaceState({}, '', url.toString());
+    }
+
+    if (!('serviceWorker' in navigator)) return;
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'OPEN_NOTIFICATIONS') {
+        setActiveTab('notifikasi');
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, []);
   const [guruSubmenu, setGuruSubmenu] = useState<GuruSubmenu>('direktori');
   const [siswaSubmenu, setSiswaSubmenu] = useState<SiswaSubmenu>('daftar');
   const [keuanganSubmenu, setKeuanganSubmenu] = useState<KeuanganSubmenu | null>(null);
   const [keuanganClassLevel, setKeuanganClassLevel] = useState<FinanceClassLevel | null>(null);
   const [keuanganMenuOpen, setKeuanganMenuOpen] = useState(false);
   const [expandedFinanceCategory, setExpandedFinanceCategory] = useState<KeuanganSubmenu | null>(null);
+  const [administrasiSubmenu, setAdministrasiSubmenu] = useState<AdministrasiSubmenu | null>(null);
+  const [administrasiSecondSubmenu, setAdministrasiSecondSubmenu] =
+    useState<SuratMenyuratSubmenu | null>(null);
+  const [suratKeluarCategory, setSuratKeluarCategory] =
+    useState<SuratKeluarCategoryFilter>('semua');
+  const [administrasiMenuOpen, setAdministrasiMenuOpen] = useState(false);
+  const [suratMenyuratOpen, setSuratMenyuratOpen] = useState(false);
+  const [suratKeluarOpen, setSuratKeluarOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
@@ -148,6 +195,7 @@ export function DashboardWorkspace() {
       { id: 'data_siswa', label: 'Data Siswa', icon: Users },
       { id: 'absensi', label: 'Laporan Absensi', icon: CalendarCheck },
       { id: 'keuangan', label: 'Keuangan Madrasah', icon: Wallet },
+      { id: 'administrasi', label: 'Administrasi', icon: FolderKanban },
       { id: 'notifikasi', label: 'Notifikasi Real-Time', icon: Bell },
     ];
 
@@ -164,6 +212,12 @@ export function DashboardWorkspace() {
     setKeuanganClassLevel(null);
     setKeuanganMenuOpen(false);
     setExpandedFinanceCategory(null);
+    setAdministrasiSubmenu(null);
+    setAdministrasiSecondSubmenu(null);
+    setSuratKeluarCategory('semua');
+    setAdministrasiMenuOpen(false);
+    setSuratMenyuratOpen(false);
+    setSuratKeluarOpen(false);
   };
 
   const handleQuickSeed = async () => {
@@ -206,6 +260,16 @@ export function DashboardWorkspace() {
               : ''
           }`
         : 'Keuangan Madrasah'
+      : activeTab === 'administrasi'
+      ? administrasiSubmenu === 'surat_menyurat'
+        ? administrasiSecondSubmenu === 'surat_keluar'
+          ? suratKeluarCategory !== 'semua'
+            ? `Administrasi / Surat Menyurat / Surat Keluar / ${
+                SURAT_KELUAR_CATEGORIES.find((c) => c.id === suratKeluarCategory)?.label || ''
+              }`
+            : 'Administrasi / Surat Menyurat / Surat Keluar'
+          : 'Administrasi / Surat Menyurat'
+        : 'Administrasi'
       : navItems.find((i) => i.id === activeTab)?.label || 'Ringkasan';
 
   return (
@@ -273,6 +337,7 @@ export function DashboardWorkspace() {
                           setKeuanganClassLevel(null);
                           setKeuanganMenuOpen(true);
                           setExpandedFinanceCategory(null);
+                          setAdministrasiMenuOpen(false);
                         }
                       }}
                       className={`w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
@@ -401,6 +466,174 @@ export function DashboardWorkspace() {
                 );
               }
 
+              if (item.id === 'administrasi') {
+                return (
+                  <div key={item.id} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTab === 'administrasi') {
+                          setAdministrasiMenuOpen((prev) => !prev);
+                        } else {
+                          setActiveTab('administrasi');
+                          setAdministrasiSubmenu('surat_menyurat');
+                          setAdministrasiSecondSubmenu(null);
+                          setSuratKeluarCategory('semua');
+                          setAdministrasiMenuOpen(true);
+                          setSuratMenyuratOpen(true);
+                          setSuratKeluarOpen(false);
+                          setKeuanganMenuOpen(false);
+                          setExpandedFinanceCategory(null);
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                        active
+                          ? 'bg-[#0F533F] text-[#FAF8F2] border border-[#2A7860]'
+                          : 'text-[#C6DDD4] hover:bg-[#0B3C2E] hover:text-[#FAF8F2] border border-transparent'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <Icon
+                          className={`w-4 h-4 shrink-0 ${
+                            active ? 'text-[#F3D88B]' : 'text-[#8BB7A7]'
+                          }`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {administrasiMenuOpen ? (
+                        <ChevronDown className="w-4 h-4 shrink-0 text-[#F3D88B]" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 shrink-0 text-[#8BB7A7]" />
+                      )}
+                    </button>
+
+                    {administrasiMenuOpen && (
+                      <div className="ml-4 pl-3 border-l border-[#1C5E4A] space-y-1">
+                        {/* Submenu Pertama: Surat Menyurat */}
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('administrasi');
+                              setAdministrasiSubmenu('surat_menyurat');
+                              setAdministrasiSecondSubmenu(null);
+                              setSuratKeluarCategory('semua');
+                              setSuratMenyuratOpen((prev) => !prev);
+                            }}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left ${
+                              activeTab === 'administrasi' &&
+                              administrasiSubmenu === 'surat_menyurat' &&
+                              !administrasiSecondSubmenu
+                                ? 'bg-[#0F533F] text-[#FAF8F2] border border-[#2A7860]'
+                                : activeTab === 'administrasi' && administrasiSubmenu === 'surat_menyurat'
+                                ? 'bg-[#0B3C2E] text-[#F3D88B]'
+                                : 'text-[#B8D5CA] hover:bg-[#0B3C2E] hover:text-[#FAF8F2]'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <Mail
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  activeTab === 'administrasi' && administrasiSubmenu === 'surat_menyurat'
+                                    ? 'text-[#F3D88B]'
+                                    : 'text-[#8BB7A7]'
+                                }`}
+                              />
+                              <span className="truncate">Surat Menyurat</span>
+                            </span>
+                            {suratMenyuratOpen ? (
+                              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-[#F3D88B]" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 shrink-0 text-[#8BB7A7]" />
+                            )}
+                          </button>
+
+                          {suratMenyuratOpen && (
+                            <div className="ml-3 pl-2.5 border-l border-[#1C5E4A] space-y-1">
+                              {/* Submenu Kedua: Surat Keluar */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveTab('administrasi');
+                                  setAdministrasiSubmenu('surat_menyurat');
+                                  setAdministrasiSecondSubmenu('surat_keluar');
+                                  setSuratKeluarCategory('semua');
+                                  setSuratKeluarOpen((prev) => !prev);
+                                }}
+                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer text-left ${
+                                  activeTab === 'administrasi' &&
+                                  administrasiSecondSubmenu === 'surat_keluar' &&
+                                  suratKeluarCategory === 'semua'
+                                    ? 'bg-[#D4A74A] text-[#062C21] font-semibold'
+                                    : activeTab === 'administrasi' &&
+                                      administrasiSecondSubmenu === 'surat_keluar'
+                                    ? 'bg-[#0F533F] text-[#F3D88B]'
+                                    : 'text-[#B8D5CA] hover:bg-[#0B3C2E] hover:text-[#FAF8F2]'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  <Send
+                                    className={`w-3 h-3 shrink-0 ${
+                                      activeTab === 'administrasi' &&
+                                      administrasiSecondSubmenu === 'surat_keluar' &&
+                                      suratKeluarCategory === 'semua'
+                                        ? 'text-[#062C21]'
+                                        : 'text-[#F3D88B]'
+                                    }`}
+                                  />
+                                  <span className="truncate">Surat Keluar</span>
+                                </span>
+                                {suratKeluarOpen ? (
+                                  <ChevronDown className="w-3 h-3 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3 shrink-0" />
+                                )}
+                              </button>
+
+                              {suratKeluarOpen && (
+                                <div className="ml-2.5 pl-2 border-l border-[#1C5E4A] flex flex-col gap-0.5">
+                                  {SURAT_KELUAR_CATEGORIES.map((cat) => {
+                                    const CatIcon = cat.icon;
+                                    const catActive =
+                                      activeTab === 'administrasi' &&
+                                      administrasiSecondSubmenu === 'surat_keluar' &&
+                                      suratKeluarCategory === cat.id;
+                                    return (
+                                      <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveTab('administrasi');
+                                          setAdministrasiSubmenu('surat_menyurat');
+                                          setAdministrasiSecondSubmenu('surat_keluar');
+                                          setSuratKeluarCategory(cat.id);
+                                          setMobileMenuOpen(false);
+                                        }}
+                                        className={`w-full flex items-center gap-1.5 text-left px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                                          catActive
+                                            ? 'bg-[#D4A74A] text-[#062C21] font-semibold'
+                                            : 'text-[#B8D5CA] hover:bg-[#0B3C2E] hover:text-[#FAF8F2]'
+                                        }`}
+                                      >
+                                        <CatIcon
+                                          className={`w-3 h-3 shrink-0 ${
+                                            catActive ? 'text-[#062C21]' : 'text-[#8BB7A7]'
+                                          }`}
+                                        />
+                                        <span className="truncate">{cat.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={item.id}
@@ -409,6 +642,7 @@ export function DashboardWorkspace() {
                     setActiveTab(item.id);
                     setKeuanganMenuOpen(false);
                     setExpandedFinanceCategory(null);
+                    setAdministrasiMenuOpen(false);
                     setMobileMenuOpen(false);
                   }}
                   className={`w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
@@ -622,6 +856,33 @@ export function DashboardWorkspace() {
                   }}
                   selectedClass={keuanganClassLevel}
                   onChangeClass={setKeuanganClassLevel}
+                />
+              )}
+
+              {activeTab === 'administrasi' && canTeach && (
+                <AdministrationMailView
+                  mails={outgoingMails}
+                  students={students}
+                  madrasahIdentity={madrasahIdentity}
+                  activeSubmenu={administrasiSubmenu}
+                  onChangeSubmenu={(sub) => {
+                    setAdministrasiSubmenu(sub);
+                    if (sub === 'surat_menyurat') {
+                      setAdministrasiMenuOpen(true);
+                      setSuratMenyuratOpen(true);
+                    }
+                  }}
+                  activeSecondSubmenu={administrasiSecondSubmenu}
+                  onChangeSecondSubmenu={(sub2) => {
+                    setAdministrasiSecondSubmenu(sub2);
+                    if (sub2 === 'surat_keluar') {
+                      setAdministrasiMenuOpen(true);
+                      setSuratMenyuratOpen(true);
+                      setSuratKeluarOpen(true);
+                    }
+                  }}
+                  selectedCategory={suratKeluarCategory}
+                  onChangeCategory={setSuratKeluarCategory}
                 />
               )}
 

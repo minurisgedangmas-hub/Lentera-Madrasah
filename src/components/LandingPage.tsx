@@ -287,7 +287,7 @@ export function LandingPage() {
               className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-lg bg-[#064E3B] text-[#FAF8F2] text-xs sm:text-sm font-semibold hover:bg-[#04392B] transition-colors whitespace-nowrap shadow-sm cursor-pointer disabled:opacity-60"
             >
               <LogIn className="w-4 h-4 text-[#F3D88B]" />
-              <span>{signingIn ? 'Menghubungkan...' : 'Masuk Pengelola'}</span>
+              <span>{signingIn ? 'Menghubungkan...' : 'Masuk Portal'}</span>
             </button>
             <button
               type="button"

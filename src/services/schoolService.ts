@@ -1,12 +1,17 @@
 import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  deleteDoc,
+  where,
   writeBatch,
-  arrayUnion,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
@@ -34,6 +39,10 @@ import {
   FinanceTransactionType,
   GradeLevel,
   NotificationRecord,
+  OutgoingMailCategory,
+  OutgoingMailPriority,
+  OutgoingMailRecord,
+  OutgoingMailStatus,
   SchoolClass,
   StudentEntryType,
   StudentMutationRecord,
@@ -1051,6 +1060,7 @@ export async function updateUserRoleByAdmin(input: {
   linkedStudentIds: string[];
   classIds: string[];
   assignedSubjects?: string[];
+  allStudents?: StudentRecord[];
 }) {
   const path = `users/${input.user.uid}`;
   const roleLabel =
@@ -1069,10 +1079,12 @@ export async function updateUserRoleByAdmin(input: {
     .filter(Boolean)
     .slice(0, LIMITS.SUBJECTS_MAX);
 
+  const cleanLinkedIds = input.linkedStudentIds.slice(0, LIMITS.LINKED_STUDENTS_MAX);
+
   const batch = writeBatch(db);
   batch.update(doc(db, 'users', input.user.uid), {
     role: input.role,
-    linkedStudentIds: input.linkedStudentIds.slice(0, LIMITS.LINKED_STUDENTS_MAX),
+    linkedStudentIds: cleanLinkedIds,
     classIds: input.classIds.slice(0, LIMITS.CLASS_IDS_MAX),
     assignedSubjects: cleanSubjects,
     updatedAt: serverTimestamp(),
@@ -1090,10 +1102,82 @@ export async function updateUserRoleByAdmin(input: {
     { merge: true }
   );
 
+  // Keep students/{id}.parentUids and studentUid synchronized for Firestore RBAC isolation
+  const changedStudentIdsForParentSync: string[] = [];
+  if (input.allStudents && input.allStudents.length > 0) {
+    const targetSet = new Set(cleanLinkedIds);
+    for (const stu of input.allStudents) {
+      const hasParentUid = (stu.parentUids || []).includes(input.user.uid);
+      const hasStudentUid = stu.studentUid === input.user.uid;
+      const shouldBeParent = input.role === 'orangtua' && targetSet.has(stu.id);
+      const shouldBeStudent = input.role === 'siswa' && targetSet.has(stu.id);
+
+      if (shouldBeParent && !hasParentUid) {
+        batch.update(doc(db, 'students', stu.id), {
+          parentUids: arrayUnion(input.user.uid),
+          updatedAt: serverTimestamp(),
+        });
+        changedStudentIdsForParentSync.push(stu.id);
+      } else if (!shouldBeParent && hasParentUid) {
+        batch.update(doc(db, 'students', stu.id), {
+          parentUids: arrayRemove(input.user.uid),
+          updatedAt: serverTimestamp(),
+        });
+        changedStudentIdsForParentSync.push(stu.id);
+      }
+
+      if (shouldBeStudent && !hasStudentUid) {
+        batch.update(doc(db, 'students', stu.id), {
+          studentUid: input.user.uid,
+          updatedAt: serverTimestamp(),
+        });
+        changedStudentIdsForParentSync.push(stu.id);
+      } else if (!shouldBeStudent && hasStudentUid) {
+        batch.update(doc(db, 'students', stu.id), {
+          studentUid: '',
+          updatedAt: serverTimestamp(),
+        });
+        changedStudentIdsForParentSync.push(stu.id);
+      }
+    }
+  }
+
   try {
     await batch.commit();
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+
+  // Also backfill existing attendance records so parents see prior attendance immediately
+  if (changedStudentIdsForParentSync.length > 0 && input.allStudents) {
+    const targetSet = new Set(cleanLinkedIds);
+    const uniqueStudentIds = Array.from(new Set(changedStudentIdsForParentSync));
+    for (const sid of uniqueStudentIds) {
+      try {
+        const attSnap = await getDocs(
+          query(collection(db, 'attendance'), where('studentId', '==', sid))
+        );
+        if (attSnap.empty) continue;
+        const attBatch = writeBatch(db);
+        const shouldBeParent = input.role === 'orangtua' && targetSet.has(sid);
+        const shouldBeStudent = input.role === 'siswa' && targetSet.has(sid);
+        for (const attDoc of attSnap.docs) {
+          const patch: Record<string, unknown> = { updatedAt: serverTimestamp() };
+          if (shouldBeParent) {
+            patch.parentUids = arrayUnion(input.user.uid);
+          } else {
+            patch.parentUids = arrayRemove(input.user.uid);
+          }
+          if (input.role === 'siswa') {
+            patch.studentUid = shouldBeStudent ? input.user.uid : '';
+          }
+          attBatch.update(attDoc.ref, patch);
+        }
+        await attBatch.commit();
+      } catch (err) {
+        console.warn('Backfill attendance parent/student UID skipped:', err);
+      }
+    }
   }
 }
 
@@ -1719,6 +1803,107 @@ export async function deleteAttendanceReportLink(record: AttendanceReportLink) {
     await deleteDoc(doc(db, 'attendanceReportLinks', record.id));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `attendanceReportLinks/${record.id}`);
+  }
+}
+
+export interface OutgoingMailInput {
+  category: OutgoingMailCategory;
+  letterNumber: string;
+  letterDate: string;
+  subject: string;
+  recipient: string;
+  priority: OutgoingMailPriority;
+  attachmentCount?: string;
+  studentId?: string;
+  studentName?: string;
+  content: string;
+  signerName: string;
+  signerTitle?: string;
+  status: OutgoingMailStatus;
+  driveUrl?: string;
+}
+
+function sanitizeSafeHttpsUrl(raw?: string): string {
+  const cleaned = clampString(raw || '', LIMITS.DRIVE_URL_MAX);
+  if (!cleaned) return '';
+  return /^https:\/\/.+/i.test(cleaned) ? cleaned : '';
+}
+
+export async function createOutgoingMail(
+  input: OutgoingMailInput & { actorUid: string; actorName: string }
+) {
+  const id = makeDocId('mail');
+  const path = `outgoingMails/${id}`;
+  const safeDate = DATE_PATTERN.test(input.letterDate) ? input.letterDate : todayIsoDate();
+  const safeDriveUrl = sanitizeSafeHttpsUrl(input.driveUrl);
+
+  try {
+    await setDoc(doc(db, 'outgoingMails', id), {
+      id,
+      category: input.category,
+      letterNumber: clampString(input.letterNumber, LIMITS.MAIL_NUMBER_MAX),
+      letterDate: safeDate,
+      subject: clampString(input.subject, LIMITS.MAIL_SUBJECT_MAX),
+      recipient: clampString(input.recipient, LIMITS.MAIL_RECIPIENT_MAX),
+      priority: input.priority,
+      attachmentCount: clampString(input.attachmentCount || '-', LIMITS.MAIL_ATTACHMENT_MAX),
+      studentId: clampString(input.studentId || '', LIMITS.ID_MAX),
+      studentName: clampString(input.studentName || '', LIMITS.DISPLAY_NAME_MAX),
+      content: clampString(input.content, LIMITS.MAIL_CONTENT_MAX),
+      signerName: clampString(input.signerName, LIMITS.MAIL_SIGNER_NAME_MAX),
+      signerTitle: clampString(input.signerTitle || 'Kepala Madrasah', LIMITS.MAIL_SIGNER_TITLE_MAX),
+      status: input.status,
+      driveUrl: safeDriveUrl,
+      createdBy: input.actorUid,
+      createdByName: clampString(input.actorName || 'Pengelola Madrasah', LIMITS.DISPLAY_NAME_MAX),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return id;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, path);
+  }
+}
+
+export async function updateOutgoingMail(
+  record: OutgoingMailRecord,
+  input: OutgoingMailInput
+) {
+  const path = `outgoingMails/${record.id}`;
+  const safeDate = DATE_PATTERN.test(input.letterDate) ? input.letterDate : todayIsoDate();
+  const safeDriveUrl =
+    input.driveUrl !== undefined
+      ? sanitizeSafeHttpsUrl(input.driveUrl)
+      : sanitizeSafeHttpsUrl(record.driveUrl);
+
+  try {
+    await updateDoc(doc(db, 'outgoingMails', record.id), {
+      category: input.category,
+      letterNumber: clampString(input.letterNumber, LIMITS.MAIL_NUMBER_MAX),
+      letterDate: safeDate,
+      subject: clampString(input.subject, LIMITS.MAIL_SUBJECT_MAX),
+      recipient: clampString(input.recipient, LIMITS.MAIL_RECIPIENT_MAX),
+      priority: input.priority,
+      attachmentCount: clampString(input.attachmentCount || '-', LIMITS.MAIL_ATTACHMENT_MAX),
+      studentId: clampString(input.studentId || '', LIMITS.ID_MAX),
+      studentName: clampString(input.studentName || '', LIMITS.DISPLAY_NAME_MAX),
+      content: clampString(input.content, LIMITS.MAIL_CONTENT_MAX),
+      signerName: clampString(input.signerName, LIMITS.MAIL_SIGNER_NAME_MAX),
+      signerTitle: clampString(input.signerTitle || 'Kepala Madrasah', LIMITS.MAIL_SIGNER_TITLE_MAX),
+      status: input.status,
+      driveUrl: safeDriveUrl,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteOutgoingMail(record: OutgoingMailRecord) {
+  try {
+    await deleteDoc(doc(db, 'outgoingMails', record.id));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `outgoingMails/${record.id}`);
   }
 }
 

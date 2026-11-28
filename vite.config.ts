@@ -18,6 +18,7 @@ export default defineConfig(() => {
           'pwa-192x192.png',
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
+          'sw-notifications.js',
         ],
         manifest: {
           id: '/',
@@ -53,6 +54,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          importScripts: ['/sw-notifications.js'],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           runtimeCaching: [
@@ -88,7 +90,6 @@ export default defineConfig(() => {
         },
         devOptions: {
           enabled: true,
-          type: 'module',
         },
       }),
       // Copies src/assets into dist/ so root-relative URLs like

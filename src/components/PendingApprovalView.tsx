@@ -70,10 +70,14 @@ export function PendingApprovalView() {
             </div>
             <div>
               <h1 className="font-display text-base font-bold text-slate-900">
-                Papan Pengumuman Kegiatan Terbuka untuk Wali Murid
+                Akun Berhasil Masuk — Menunggu Verifikasi &amp; Penautan Anak oleh Admin
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                Anda tetap dapat membaca seluruh pengumuman kegiatan madrasah di bawah ini. Menu akademik lainnya (nilai, absensi, dan data siswa) akan dibuka pada pembaruan berikutnya setelah verifikasi admin.
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                Demi privasi siswa, akses pemantauan absensi dan profil anak akan terbuka otomatis setelah Admin
+                menyetujui akun <span className="font-semibold text-slate-800">{profile?.email}</span> dan
+                menautkannya ke nama anak Anda. Sampaikan email Google Anda ke Admin Madrasah, lalu tekan{' '}
+                <span className="font-semibold text-[#064E3B]">Cek Status Akun</span>. Sambil menunggu, Anda dapat
+                membaca pengumuman kegiatan madrasah di bawah ini.
               </p>
             </div>
           </div>

@@ -10,12 +10,18 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
+  isExternalNotifEnabled,
+  showExternalSystemNotification,
+  syncAppBadge,
+} from '../utils/externalNotifications';
+import {
   AnnouncementRecord,
   AttendanceRecord,
   AttendanceReportLink,
   FinanceTransactionRecord,
   MadrasahIdentity,
   NotificationRecord,
+  OutgoingMailRecord,
   PublicProfile,
   RoleInvite,
   SchoolClass,
@@ -131,6 +137,7 @@ export function useSchoolData() {
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [studentMutations, setStudentMutations] = useState<StudentMutationRecord[]>([]);
   const [financeTransactions, setFinanceTransactions] = useState<FinanceTransactionRecord[]>([]);
+  const [outgoingMails, setOutgoingMails] = useState<OutgoingMailRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [latestToast, setLatestToast] = useState<NotificationRecord | null>(null);
 
@@ -152,6 +159,7 @@ export function useSchoolData() {
       setTeachers([]);
       setStudentMutations([]);
       setFinanceTransactions([]);
+      setOutgoingMails([]);
       setLoading(false);
       initialNotifLoadedRef.current = false;
       knownNotifIdsRef.current.clear();
@@ -371,6 +379,26 @@ export function useSchoolData() {
           (err) => handleFirestoreError(err, OperationType.LIST, 'financeTransactions')
         )
       );
+
+      // 12. Outgoing Mails (Administrasi Surat Menyurat / Surat Keluar)
+      const mailQuery =
+        role === 'admin'
+          ? collection(db, 'outgoingMails')
+          : query(collection(db, 'outgoingMails'), where('createdBy', '==', uid));
+
+      unsubs.push(
+        onSnapshot(
+          mailQuery,
+          (snap) => {
+            const items = sortByCreatedDesc(
+              snap.docs.map((d) => d.data() as OutgoingMailRecord)
+            );
+            items.sort((a, b) => b.letterDate.localeCompare(a.letterDate));
+            setOutgoingMails(items);
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'outgoingMails')
+        )
+      );
     }
 
     return () => {
@@ -401,6 +429,13 @@ export function useSchoolData() {
 
     if (newest) {
       setLatestToast(newest);
+      if (isExternalNotifEnabled()) {
+        void showExternalSystemNotification({
+          id: newest.id,
+          title: newest.title,
+          message: newest.message,
+        });
+      }
       const timer = window.setTimeout(() => {
         setLatestToast((prev) => (prev?.id === newest.id ? null : prev));
       }, 6000);
@@ -419,6 +454,11 @@ export function useSchoolData() {
     }).length;
   }, [notifications, firebaseUser]);
 
+  // Sync unread count to PWA App Icon Badge (Badging API) and browser tab title
+  useEffect(() => {
+    void syncAppBadge(unreadCount);
+  }, [unreadCount]);
+
   return {
     madrasahIdentity,
     classes,
@@ -433,6 +473,7 @@ export function useSchoolData() {
     teachers,
     studentMutations,
     financeTransactions,
+    outgoingMails,
     attendanceReportLinks,
     loading,
     latestToast,
