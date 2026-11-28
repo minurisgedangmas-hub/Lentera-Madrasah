@@ -132,7 +132,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'name', 'gradeLevel', 'homeroomTeacherUid', 'homeroomTeacherName', 'academicYear', 'isActive', 'subjects', 'createdBy', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['id', 'name', 'gradeLevel', 'homeroomTeacherUid', 'homeroomTeacherName', 'academicYear', 'isActive', 'subjects', 'createdBy', 'createdAt', 'updatedAt']) &&
         isValidId(data.id) &&
-        isBoundedString(data.name, 2, 60) &&
+        isBoundedString(data.name, 1, 60) &&
         data.gradeLevel in ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'] &&
         isValidId(data.homeroomTeacherUid) &&
         isBoundedString(data.homeroomTeacherName, 1, 100) &&
@@ -146,13 +146,15 @@ service cloud.firestore {
 
     function isValidStudent(data) {
       return data.keys().hasAll(['id', 'nisn', 'fullName', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'createdBy', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'nisn', 'fullName', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'status', 'gender', 'birthPlace', 'birthDate', 'parentName', 'phone', 'address', 'entryType', 'entryDate', 'previousSchool', 'graduationYear', 'nextSchool', 'certificateNumber', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentIdNumber', 'nisn', 'fullName', 'nik', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'status', 'gender', 'birthPlace', 'birthDate', 'parentName', 'fatherName', 'motherName', 'phone', 'address', 'entryType', 'entryDate', 'previousSchool', 'graduationYear', 'nextSchool', 'certificateNumber', 'createdBy', 'createdAt', 'updatedAt']) &&
         isValidId(data.id) &&
+        (!('studentIdNumber' in data) || isBoundedString(data.studentIdNumber, 0, 30)) &&
         isValidId(data.nisn) &&
         data.nisn.size() >= 4 && data.nisn.size() <= 20 &&
         isBoundedString(data.fullName, 2, 100) &&
+        (!('nik' in data) || isBoundedString(data.nik, 0, 30)) &&
         isValidId(data.classId) &&
-        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.className, 1, 60) &&
         isBoundedString(data.studentUid, 0, 128) &&
         isBoundedStringList(data.parentUids, 4) &&
         isBoundedStringList(data.teacherUids, 20) &&
@@ -161,6 +163,8 @@ service cloud.firestore {
         (!('birthPlace' in data) || isBoundedString(data.birthPlace, 0, 100)) &&
         (!('birthDate' in data) || isBoundedString(data.birthDate, 0, 25)) &&
         (!('parentName' in data) || isBoundedString(data.parentName, 0, 120)) &&
+        (!('fatherName' in data) || isBoundedString(data.fatherName, 0, 120)) &&
+        (!('motherName' in data) || isBoundedString(data.motherName, 0, 120)) &&
         (!('phone' in data) || isBoundedString(data.phone, 0, 25)) &&
         (!('address' in data) || isBoundedString(data.address, 0, 300)) &&
         (!('entryType' in data) || data.entryType in ['Siswa Baru', 'Mutasi Masuk']) &&
@@ -185,7 +189,7 @@ service cloud.firestore {
         data.mutationType in ['Masuk', 'Keluar'] &&
         data.mutationDate is string && data.mutationDate.size() == 10 && data.mutationDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
         isValidId(data.classId) &&
-        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.className, 1, 60) &&
         isBoundedString(data.schoolOriginOrDestination, 2, 140) &&
         isBoundedString(data.reason, 0, 300) &&
         isBoundedString(data.letterNumber, 0, 60) &&
@@ -203,7 +207,7 @@ service cloud.firestore {
         isBoundedString(data.studentUid, 0, 128) &&
         isBoundedStringList(data.parentUids, 4) &&
         isValidId(data.classId) &&
-        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.className, 1, 60) &&
         isBoundedString(data.subject, 2, 60) &&
         data.assessmentType in ['Tugas', 'UH', 'UTS', 'UAS', 'Praktik'] &&
         isBoundedString(data.title, 2, 120) &&
@@ -226,7 +230,7 @@ service cloud.firestore {
         isBoundedString(data.studentUid, 0, 128) &&
         isBoundedStringList(data.parentUids, 4) &&
         isValidId(data.classId) &&
-        isBoundedString(data.className, 2, 60) &&
+        isBoundedString(data.className, 1, 60) &&
         data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
         data.status in ['Hadir', 'Izin', 'Sakit', 'Alpha'] &&
         isBoundedString(data.notes, 0, 300) &&
@@ -277,7 +281,7 @@ service cloud.firestore {
 
     function isValidMadrasahIdentity(data) {
       return data.keys().hasAll(['id', 'namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'isPublic', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'logoUrl', 'jadwalPelajaranUrl', 'absensiReportUrl', 'isPublic', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'logoUrl', 'heroPhotoUrl', 'heroBadge', 'heroTitle', 'heroSlogan', 'heroDescription', 'heroPhotoCaption', 'jadwalPelajaranUrl', 'absensiReportUrl', 'galeriDriveUrl', 'agendaContent', 'programContent', 'prestasiContent', 'spmbContent', 'spmbUrl', 'kontakPhone', 'kontakEmail', 'googleMapsUrl', 'youtubeUrl', 'instagramUrl', 'whatsappUrl', 'isPublic', 'updatedBy', 'updatedByName', 'createdAt', 'updatedAt']) &&
         data.id == 'main' &&
         isBoundedString(data.namaYayasan, 2, 140) &&
         isBoundedString(data.namaMadrasah, 2, 140) &&
@@ -288,8 +292,26 @@ service cloud.firestore {
         data.tahunBerdiri is string && data.tahunBerdiri.size() == 4 && data.tahunBerdiri.matches('^[0-9]{4}$') &&
         isBoundedString(data.namaKepalaMadrasah, 2, 120) &&
         (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 500 && (data.logoUrl.size() == 0 || data.logoUrl.matches('^https://.*')))) &&
+        (!('heroPhotoUrl' in data) || (data.heroPhotoUrl is string && data.heroPhotoUrl.size() <= 500 && (data.heroPhotoUrl.size() == 0 || data.heroPhotoUrl.matches('^https://.*')))) &&
+        (!('heroBadge' in data) || (data.heroBadge is string && data.heroBadge.size() <= 100)) &&
+        (!('heroTitle' in data) || (data.heroTitle is string && data.heroTitle.size() <= 140)) &&
+        (!('heroSlogan' in data) || (data.heroSlogan is string && data.heroSlogan.size() <= 240)) &&
+        (!('heroDescription' in data) || (data.heroDescription is string && data.heroDescription.size() <= 500)) &&
+        (!('heroPhotoCaption' in data) || (data.heroPhotoCaption is string && data.heroPhotoCaption.size() <= 120)) &&
         (!('jadwalPelajaranUrl' in data) || (data.jadwalPelajaranUrl is string && data.jadwalPelajaranUrl.size() <= 500 && (data.jadwalPelajaranUrl.size() == 0 || data.jadwalPelajaranUrl.matches('^https://.*')))) &&
         (!('absensiReportUrl' in data) || (data.absensiReportUrl is string && data.absensiReportUrl.size() <= 500 && (data.absensiReportUrl.size() == 0 || data.absensiReportUrl.matches('^https://.*')))) &&
+        (!('galeriDriveUrl' in data) || (data.galeriDriveUrl is string && data.galeriDriveUrl.size() <= 500 && (data.galeriDriveUrl.size() == 0 || data.galeriDriveUrl.matches('^https://.*')))) &&
+        (!('agendaContent' in data) || (data.agendaContent is string && data.agendaContent.size() <= 2000)) &&
+        (!('programContent' in data) || (data.programContent is string && data.programContent.size() <= 2000)) &&
+        (!('prestasiContent' in data) || (data.prestasiContent is string && data.prestasiContent.size() <= 2000)) &&
+        (!('spmbContent' in data) || (data.spmbContent is string && data.spmbContent.size() <= 2000)) &&
+        (!('spmbUrl' in data) || (data.spmbUrl is string && data.spmbUrl.size() <= 500 && (data.spmbUrl.size() == 0 || data.spmbUrl.matches('^https://.*')))) &&
+        (!('kontakPhone' in data) || (data.kontakPhone is string && data.kontakPhone.size() <= 50)) &&
+        (!('kontakEmail' in data) || (data.kontakEmail is string && data.kontakEmail.size() <= 160)) &&
+        (!('googleMapsUrl' in data) || (data.googleMapsUrl is string && data.googleMapsUrl.size() <= 500 && (data.googleMapsUrl.size() == 0 || data.googleMapsUrl.matches('^https://.*')))) &&
+        (!('youtubeUrl' in data) || (data.youtubeUrl is string && data.youtubeUrl.size() <= 500 && (data.youtubeUrl.size() == 0 || data.youtubeUrl.matches('^https://.*')))) &&
+        (!('instagramUrl' in data) || (data.instagramUrl is string && data.instagramUrl.size() <= 500 && (data.instagramUrl.size() == 0 || data.instagramUrl.matches('^https://.*')))) &&
+        (!('whatsappUrl' in data) || (data.whatsappUrl is string && data.whatsappUrl.size() <= 500 && (data.whatsappUrl.size() == 0 || data.whatsappUrl.matches('^https://.*')))) &&
         data.isPublic is bool &&
         isValidId(data.updatedBy) &&
         isBoundedString(data.updatedByName, 1, 100) &&
@@ -375,7 +397,7 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedBy == request.auth.uid &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'logoUrl', 'jadwalPelajaranUrl', 'absensiReportUrl', 'isPublic', 'updatedBy', 'updatedByName', 'updatedAt']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['namaYayasan', 'namaMadrasah', 'nsm', 'npsn', 'statusAkreditasi', 'alamat', 'tahunBerdiri', 'namaKepalaMadrasah', 'logoUrl', 'heroPhotoUrl', 'heroBadge', 'heroTitle', 'heroSlogan', 'heroDescription', 'heroPhotoCaption', 'jadwalPelajaranUrl', 'absensiReportUrl', 'galeriDriveUrl', 'agendaContent', 'programContent', 'prestasiContent', 'spmbContent', 'spmbUrl', 'kontakPhone', 'kontakEmail', 'googleMapsUrl', 'youtubeUrl', 'instagramUrl', 'whatsappUrl', 'isPublic', 'updatedBy', 'updatedByName', 'updatedAt']);
       allow delete: if isValidId(profileId) && isAdmin();
     }
 
@@ -564,7 +586,7 @@ service cloud.firestore {
           isAdmin() ||
           (isTeacher() && (existing().createdBy == request.auth.uid || (request.auth.uid in existing().teacherUids)))
         ) &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['nisn', 'fullName', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'status', 'gender', 'birthPlace', 'birthDate', 'parentName', 'phone', 'address', 'entryType', 'entryDate', 'previousSchool', 'graduationYear', 'nextSchool', 'certificateNumber', 'updatedAt']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['studentIdNumber', 'nisn', 'fullName', 'nik', 'classId', 'className', 'studentUid', 'parentUids', 'teacherUids', 'status', 'gender', 'birthPlace', 'birthDate', 'parentName', 'fatherName', 'motherName', 'phone', 'address', 'entryType', 'entryDate', 'previousSchool', 'graduationYear', 'nextSchool', 'certificateNumber', 'updatedAt']);
       allow delete: if isValidId(studentId) && isAdmin();
     }
 

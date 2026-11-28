@@ -148,7 +148,7 @@
         },
         "name": {
           "type": "string",
-          "minLength": 2,
+          "minLength": 1,
           "maxLength": 60
         },
         "gradeLevel": {
@@ -205,6 +205,10 @@
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
         },
+        "studentIdNumber": {
+          "type": "string",
+          "maxLength": 30
+        },
         "nisn": {
           "type": "string",
           "minLength": 4,
@@ -216,6 +220,10 @@
           "minLength": 2,
           "maxLength": 100
         },
+        "nik": {
+          "type": "string",
+          "maxLength": 30
+        },
         "classId": {
           "type": "string",
           "minLength": 1,
@@ -224,7 +232,7 @@
         },
         "className": {
           "type": "string",
-          "minLength": 2,
+          "minLength": 1,
           "maxLength": 60
         },
         "studentUid": {
@@ -254,6 +262,14 @@
           "maxLength": 25
         },
         "parentName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "fatherName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "motherName": {
           "type": "string",
           "maxLength": 120
         },
@@ -343,7 +359,7 @@
         },
         "className": {
           "type": "string",
-          "minLength": 2,
+          "minLength": 1,
           "maxLength": 60
         },
         "subject": {
@@ -433,7 +449,7 @@
         },
         "className": {
           "type": "string",
-          "minLength": 2,
+          "minLength": 1,
           "maxLength": 60
         },
         "date": {
@@ -672,6 +688,36 @@
           "maxLength": 500,
           "description": "Optional Google Drive or HTTPS image URL for the official Madrasah logo"
         },
+        "heroPhotoUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional Google Drive or HTTPS photo URL for the landing page hero showcase"
+        },
+        "heroBadge": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Optional welcome badge text displayed at the top of the hero banner"
+        },
+        "heroTitle": {
+          "type": "string",
+          "maxLength": 140,
+          "description": "Optional main heading prefix displayed on the hero banner"
+        },
+        "heroSlogan": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Optional prominent Madrasah slogan displayed in large typography on the hero banner"
+        },
+        "heroDescription": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional supporting description paragraph displayed on the hero banner"
+        },
+        "heroPhotoCaption": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Optional caption displayed over the hero showcase image"
+        },
         "jadwalPelajaranUrl": {
           "type": "string",
           "maxLength": 500,
@@ -681,6 +727,66 @@
           "type": "string",
           "maxLength": 500,
           "description": "Optional HTTPS URL for external Madrasah attendance report preview"
+        },
+        "galeriDriveUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional Google Drive folder or file URL for Madrasah gallery and documentation"
+        },
+        "agendaContent": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional Madrasah agenda summary managed by admin"
+        },
+        "programContent": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional Madrasah educational program overview"
+        },
+        "prestasiContent": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional Madrasah achievements overview"
+        },
+        "spmbContent": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional SPMB student admission information managed by admin"
+        },
+        "spmbUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional HTTPS link for SPMB registration portal or form"
+        },
+        "kontakPhone": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Optional official Madrasah contact phone number"
+        },
+        "kontakEmail": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Optional official Madrasah contact email"
+        },
+        "googleMapsUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional HTTPS Google Maps link for the Madrasah location"
+        },
+        "youtubeUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional HTTPS URL for official Madrasah YouTube channel"
+        },
+        "instagramUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional HTTPS URL for official Madrasah Instagram profile"
+        },
+        "whatsappUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional HTTPS URL for official Madrasah WhatsApp contact"
         },
         "isPublic": {
           "type": "boolean"
@@ -826,7 +932,7 @@
         },
         "className": {
           "type": "string",
-          "minLength": 2,
+          "minLength": 1,
           "maxLength": 60
         },
         "schoolOriginOrDestination": {
