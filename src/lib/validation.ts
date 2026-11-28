@@ -10,6 +10,8 @@ export const LIMITS = {
   ACADEMIC_YEAR_MAX: 20,
   NISN_MIN: 4,
   NISN_MAX: 20,
+  NIK_MAX: 30,
+  STUDENT_ID_NUMBER_MAX: 30,
   SUBJECT_MAX: 60,
   GRADE_TITLE_MAX: 120,
   GRADE_NOTES_MAX: 400,
@@ -28,6 +30,8 @@ export const LIMITS = {
   HEADMASTER_MAX: 120,
   LOGO_URL_MAX: 500,
   DRIVE_URL_MAX: 500,
+  CONTENT_TEXT_MAX: 2000,
+  PHONE_MAX: 50,
   LINKED_STUDENTS_MAX: 10,
   CLASS_IDS_MAX: 15,
   SUBJECTS_MAX: 20,
@@ -88,14 +92,22 @@ export function extractGoogleDriveFileId(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
 
-  const fileMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  const fileMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/i);
   if (fileMatch?.[1]) return fileMatch[1];
 
-  const paramMatch = trimmed.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?[^#]*\bid=([a-zA-Z0-9_-]+)/i);
+  const paramMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
   if (paramMatch?.[1]) return paramMatch[1];
 
   const lh3Match = trimmed.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i);
   if (lh3Match?.[1]) return lh3Match[1];
+
+  const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/i);
+  if (folderMatch?.[1]) return folderMatch[1];
+
+  // If the string itself looks like a raw Google Drive file/folder ID (20-40 alphanumeric/dash/underscore chars)
+  if (/^[a-zA-Z0-9_-]{25,50}$/.test(trimmed)) {
+    return trimmed;
+  }
 
   return null;
 }
@@ -104,7 +116,7 @@ export function isValidHttpsUrl(rawUrl: string): boolean {
   const trimmed = rawUrl.trim();
   if (!trimmed) return true;
   if (trimmed.length > LIMITS.DRIVE_URL_MAX) return false;
-  return /^https:\/\/.+/i.test(trimmed);
+  return true;
 }
 
 export function isValidHttpsLogoUrl(rawUrl: string): boolean {
@@ -113,20 +125,22 @@ export function isValidHttpsLogoUrl(rawUrl: string): boolean {
 
 export function resolveMadrasahLogoCandidates(rawUrl?: string): string[] {
   const trimmed = (rawUrl || '').trim();
-  if (!trimmed || !/^https:\/\/.+/i.test(trimmed)) return [];
+  if (!trimmed) return [];
 
   const driveId = extractGoogleDriveFileId(trimmed);
   if (driveId) {
     return Array.from(
       new Set([
-        `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`,
+        `https://drive.google.com/thumbnail?id=${driveId}&sz=w1000`,
         `https://lh3.googleusercontent.com/d/${driveId}`,
         `https://drive.google.com/uc?export=view&id=${driveId}`,
+        `https://drive.google.com/uc?export=download&id=${driveId}`,
       ])
     );
   }
 
-  return [trimmed];
+  const fixedUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return [fixedUrl];
 }
 
 export function resolveJadwalDownloadUrl(rawUrl?: string): string {
@@ -174,4 +188,21 @@ export function resolveAttendancePreviewUrl(rawUrl?: string): string {
 
   return trimmed;
 }
+
+export function normalizeWhatsAppUrl(rawValue?: string): string {
+  const trimmed = (rawValue || '').trim();
+  if (!trimmed) return '';
+  if (/^https:\/\/.+/i.test(trimmed)) return trimmed;
+  if (/^http:\/\/.+/i.test(trimmed)) return trimmed.replace(/^http:\/\//i, 'https://');
+
+  const digits = trimmed.replace(/[^0-9]/g, '');
+  if (digits.length < 8) return trimmed;
+  const international = digits.startsWith('0')
+    ? `62${digits.slice(1)}`
+    : digits.startsWith('62')
+    ? digits
+    : digits;
+  return `https://wa.me/${international}`;
+}
+
 

@@ -68,6 +68,7 @@ export function StudentMutationView({
   // Mutasi Masuk state
   const [inNisn, setInNisn] = useState('');
   const [inFullName, setInFullName] = useState('');
+  const [inNik, setInNik] = useState('');
   const [inGender, setInGender] = useState<TeacherGender>('Laki-laki');
   const [inBirthPlace, setInBirthPlace] = useState('');
   const [inBirthDate, setInBirthDate] = useState('');
@@ -156,6 +157,7 @@ export function StudentMutationView({
       await recordStudentMutationIn({
         nisn: inNisn || String(Date.now()).slice(-8),
         fullName: inFullName.trim(),
+        nik: inNik.trim(),
         gender: inGender,
         birthPlace: inBirthPlace.trim(),
         birthDate: inBirthDate.trim(),
@@ -171,6 +173,7 @@ export function StudentMutationView({
       });
       setInNisn('');
       setInFullName('');
+      setInNik('');
       setInBirthPlace('');
       setInBirthDate('');
       setInParentName('');
@@ -374,6 +377,20 @@ export function StudentMutationView({
                 onChange={(e) => setInFullName(e.target.value)}
                 placeholder="Nama lengkap sesuai akta/rapor"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-700"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                NIK
+              </label>
+              <input
+                type="text"
+                maxLength={LIMITS.NIK_MAX}
+                value={inNik}
+                onChange={(e) => setInNik(e.target.value)}
+                placeholder="Contoh: 3508124120160001"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white font-mono text-sm text-slate-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-700"
               />
             </div>
 

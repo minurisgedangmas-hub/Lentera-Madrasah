@@ -420,33 +420,37 @@ export function AnnouncementsView({
 
       {/* 4-Column Summary Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-4 sm:p-5">
-          <p className="text-xs font-medium text-slate-500">Pengumuman Aktif</p>
-          <p className="font-mono text-2xl font-bold text-slate-900 tabular-nums mt-1">
+        <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-[#04231A] border border-emerald-700/50 rounded-2xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-emerald-200 uppercase tracking-wider">Pengumuman Aktif</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-[#F3D88B] tabular-nums mt-2">
             {stats.total}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Tampil terbuka untuk publik</p>
+          <p className="text-xs text-emerald-300/80 mt-1">Tampil terbuka untuk publik</p>
         </div>
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-4 sm:p-5">
-          <p className="text-xs font-medium text-slate-500">Untuk Wali Murid</p>
-          <p className="font-mono text-2xl font-bold text-[#064E3B] tabular-nums mt-1">
+        <div className="bg-gradient-to-br from-teal-800 via-teal-950 to-[#042018] border border-teal-600/50 rounded-2xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-teal-200 uppercase tracking-wider">Untuk Wali Murid</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-teal-300 tabular-nums mt-2">
             {stats.forParentsOrAll}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Khusus orang tua &amp; umum</p>
+          <p className="text-xs text-teal-300/80 mt-1">Khusus orang tua &amp; umum</p>
         </div>
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-4 sm:p-5">
-          <p className="text-xs font-medium text-slate-500">Agenda Terjadwal</p>
-          <p className="font-mono text-2xl font-bold text-slate-900 tabular-nums mt-1">
+        <div className="bg-gradient-to-br from-cyan-800 via-cyan-950 to-[#041E28] border border-cyan-600/50 rounded-2xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-cyan-200 uppercase tracking-wider">Agenda Terjadwal</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-cyan-300 tabular-nums mt-2">
             {stats.upcomingCount}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Memiliki tanggal pelaksanaan</p>
+          <p className="text-xs text-cyan-300/80 mt-1">Memiliki tanggal pelaksanaan</p>
         </div>
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-4 sm:p-5">
-          <p className="text-xs font-medium text-slate-500">Pengumuman Penting</p>
-          <p className="font-mono text-2xl font-bold text-amber-700 tabular-nums mt-1">
+        <div className="bg-gradient-to-br from-amber-800 via-amber-950 to-[#2A1804] border border-amber-600/50 rounded-2xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-amber-200 uppercase tracking-wider">Pengumuman Penting</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-amber-300 tabular-nums mt-2">
             {stats.pinnedCount}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Disematkan di bagian atas</p>
+          <p className="text-xs text-amber-300/80 mt-1">Disematkan di bagian atas</p>
         </div>
       </div>
 

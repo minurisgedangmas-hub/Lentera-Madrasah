@@ -5,13 +5,20 @@ import {
   CheckCircle2,
   Plus,
   Search,
+  Trash2,
   UserCheck,
+  UserMinus,
   Users,
   X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { LIMITS } from '../lib/validation';
-import { assignHomeroomTeacher, createSchoolClass } from '../services/schoolService';
+import {
+  assignHomeroomTeacher,
+  clearHomeroomTeacher,
+  createSchoolClass,
+  deleteSchoolClass,
+} from '../services/schoolService';
 import {
   GradeLevel,
   SchoolClass,
@@ -61,6 +68,9 @@ export function HomeroomTeacherSettingsView({
   // Per-class draft selection map: classId -> candidate key
   const [selectedMap, setSelectedMap] = useState<Record<string, string>>({});
   const [savingClassId, setSavingClassId] = useState<string | null>(null);
+  const [clearingClassId, setClearingClassId] = useState<string | null>(null);
+  const [confirmDeleteClassId, setConfirmDeleteClassId] = useState<string | null>(null);
+  const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
 
   // Quick-add MI Class modal/panel
   const [showAddClass, setShowAddClass] = useState(false);
@@ -147,13 +157,19 @@ export function HomeroomTeacherSettingsView({
   }, [sortedClasses, gradeFilter, searchQuery]);
 
   const stats = useMemo(() => {
-    const assignedTeacherIds = new Set(classes.map((c) => c.homeroomTeacherUid));
-    const matchedInDirectory = classes.filter((c) =>
-      teachers.some(
-        (t) =>
-          t.id === c.homeroomTeacherUid ||
-          t.fullName.trim().toLowerCase() === c.homeroomTeacherName.trim().toLowerCase()
-      )
+    const assignedTeacherIds = new Set(
+      classes
+        .filter((c) => c.homeroomTeacherUid && c.homeroomTeacherUid !== 'unassigned')
+        .map((c) => c.homeroomTeacherUid)
+    );
+    const matchedInDirectory = classes.filter(
+      (c) =>
+        c.homeroomTeacherUid !== 'unassigned' &&
+        teachers.some(
+          (t) =>
+            t.id === c.homeroomTeacherUid ||
+            t.fullName.trim().toLowerCase() === c.homeroomTeacherName.trim().toLowerCase()
+        )
     ).length;
     return {
       totalClasses: classes.length,
@@ -222,9 +238,79 @@ export function HomeroomTeacherSettingsView({
     }
   };
 
+  const handleClearHomeroom = async (cls: SchoolClass) => {
+    setClearingClassId(cls.id);
+    setFeedback(null);
+    try {
+      const currentCandidate = candidates.find(
+        (c) =>
+          c.uid === cls.homeroomTeacherUid ||
+          c.name.trim().toLowerCase() === cls.homeroomTeacherName.trim().toLowerCase()
+      );
+      const linkedUser = currentCandidate
+        ? findLinkedUserByNameOrUid(currentCandidate)
+        : allUsers.find(
+            (u) =>
+              (u.role === 'guru' || u.role === 'admin') &&
+              (u.uid === cls.homeroomTeacherUid ||
+                u.displayName.trim().toLowerCase() === cls.homeroomTeacherName.trim().toLowerCase())
+          );
+      const matchedTeacher = findMatchedTeacherForClass(cls);
+      const classStudents = students.filter((s) => s.classId === cls.id);
+
+      await clearHomeroomTeacher({
+        schoolClass: cls,
+        teacherRecord: matchedTeacher,
+        syncTeacherPosition: syncPosition && Boolean(matchedTeacher),
+        linkedUser,
+        classStudents,
+      });
+
+      setSelectedMap((prev) => ({ ...prev, [cls.id]: '' }));
+      setFeedback({
+        type: 'success',
+        text: `Penetapan wali kelas untuk Kelas ${cls.name} berhasil dihapus.`,
+      });
+    } catch {
+      setFeedback({
+        type: 'error',
+        text: `Gagal menghapus penetapan wali kelas untuk Kelas ${cls.name}.`,
+      });
+    } finally {
+      setClearingClassId(null);
+    }
+  };
+
+  const handleDeleteClass = async (cls: SchoolClass) => {
+    setDeletingClassId(cls.id);
+    setFeedback(null);
+    try {
+      await deleteSchoolClass(cls);
+      setConfirmDeleteClassId(null);
+      setFeedback({
+        type: 'success',
+        text: `Kelas ${cls.name} berhasil dihapus dari daftar kelas madrasah.`,
+      });
+    } catch {
+      setFeedback({
+        type: 'error',
+        text: `Gagal menghapus Kelas ${cls.name}. Pastikan Anda memiliki hak akses pengelola/pembuat kelas.`,
+      });
+    } finally {
+      setDeletingClassId(null);
+    }
+  };
+
   const handleCreateClassSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!firebaseUser || !profile || newClassName.trim().length < 2) return;
+    if (!firebaseUser || !profile) return;
+    if (newClassName.trim().length < 1) {
+      setFeedback({
+        type: 'error',
+        text: 'Nama kelas wajib diisi (minimal 1 karakter atau angka, misal: 1 atau I A).',
+      });
+      return;
+    }
 
     const chosen = candidates.find((c) => c.key === newHomeroomKey);
     setCreatingClass(true);
@@ -246,8 +332,8 @@ export function HomeroomTeacherSettingsView({
         ],
         teacherUid: firebaseUser.uid,
         teacherName: profile.displayName,
-        homeroomTeacherUid: chosen?.uid || firebaseUser.uid,
-        homeroomTeacherName: chosen?.name || profile.displayName,
+        homeroomTeacherUid: chosen?.uid || 'unassigned',
+        homeroomTeacherName: chosen?.name || 'Belum Ditentukan',
       });
       setNewClassName('');
       setNewHomeroomKey('');
@@ -380,13 +466,16 @@ export function HomeroomTeacherSettingsView({
               <input
                 type="text"
                 required
-                minLength={2}
+                minLength={1}
                 maxLength={LIMITS.CLASS_NAME_MAX}
                 value={newClassName}
                 onChange={(e) => setNewClassName(e.target.value)}
-                placeholder="Contoh: I A atau VI B"
+                placeholder="Contoh: 1, I A, atau VI B"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-700"
               />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Jika 1 rombel per tingkat, cukup isi 1 angka/karakter (misal: 1, 2, I).
+              </p>
             </div>
 
             <div>
@@ -429,7 +518,7 @@ export function HomeroomTeacherSettingsView({
                 onChange={(e) => setNewHomeroomKey(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-700"
               >
-                <option value="">Default (Admin pembuat)</option>
+                <option value="">Belum Ditentukan (atur nanti)</option>
                 {teachers.length > 0 && (
                   <optgroup label="Dari Direktori Data Guru">
                     {teachers.map((t) => (
@@ -564,6 +653,11 @@ export function HomeroomTeacherSettingsView({
                     (chosenCandidate!.uid !== cls.homeroomTeacherUid ||
                       chosenCandidate!.name !== cls.homeroomTeacherName);
 
+                  const hasHomeroom =
+                    Boolean(cls.homeroomTeacherUid) &&
+                    cls.homeroomTeacherUid !== 'unassigned' &&
+                    cls.homeroomTeacherName !== 'Belum Ditentukan';
+
                   return (
                     <tr key={cls.id} className="hover:bg-[#F5F3EC]/70 transition-colors">
                       <td className="px-4 py-3.5 whitespace-nowrap">
@@ -580,21 +674,32 @@ export function HomeroomTeacherSettingsView({
                         </span>
                       </td>
                       <td className="px-4 py-3.5 min-w-[210px]">
-                        <p className="font-semibold text-slate-900">{cls.homeroomTeacherName}</p>
-                        {matchedTeacher ? (
-                          <p className="text-xs text-[#064E3B] mt-0.5 font-mono tabular-nums">
-                            {matchedTeacher.nuptkNpkPegId
-                              ? `NUPTK/ID: ${matchedTeacher.nuptkNpkPegId}`
-                              : 'Tercatat di Data Guru'}
-                            {matchedTeacher.phone ? ` · ${matchedTeacher.phone}` : ''}
-                          </p>
+                        {hasHomeroom ? (
+                          <>
+                            <p className="font-semibold text-slate-900">{cls.homeroomTeacherName}</p>
+                            {matchedTeacher ? (
+                              <p className="text-xs text-[#064E3B] mt-0.5 font-mono tabular-nums">
+                                {matchedTeacher.nuptkNpkPegId
+                                  ? `NUPTK/ID: ${matchedTeacher.nuptkNpkPegId}`
+                                  : 'Tercatat di Data Guru'}
+                                {matchedTeacher.phone ? ` · ${matchedTeacher.phone}` : ''}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Akun Portal / Belum ditautkan ke Data Guru
+                              </p>
+                            )}
+                          </>
                         ) : (
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Akun Portal / Belum ditautkan ke Data Guru
-                          </p>
+                          <>
+                            <p className="font-medium text-amber-800">Belum Ditentukan</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Pilih guru di samping untuk menetapkan wali kelas
+                            </p>
+                          </>
                         )}
                       </td>
-                      <td className="px-4 py-3.5 min-w-[260px]">
+                      <td className="px-4 py-3.5 min-w-[250px]">
                         <select
                           value={currentKey}
                           onChange={(e) =>
@@ -634,22 +739,74 @@ export function HomeroomTeacherSettingsView({
                         </select>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleSaveAssignment(cls)}
-                          disabled={!currentKey || savingClassId === cls.id}
-                          className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer disabled:opacity-45 ${
-                            hasChanged
-                              ? 'bg-[#064E3B] text-[#FAF8F2] hover:bg-[#04392B]'
-                              : 'border border-[#D4CFC2] bg-white text-slate-700 hover:bg-[#EAE7DC]'
-                          }`}
-                        >
-                          {savingClassId === cls.id
-                            ? 'Menyimpan...'
-                            : hasChanged
-                            ? 'Simpan Wali Kelas'
-                            : 'Terapkan'}
-                        </button>
+                        {confirmDeleteClassId === cls.id ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            {classStudentCount > 0 && (
+                              <span className="text-[11px] font-medium text-amber-800 mr-1">
+                                ({classStudentCount} siswa)
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              disabled={deletingClassId === cls.id}
+                              onClick={() => void handleDeleteClass(cls)}
+                              className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 cursor-pointer disabled:opacity-50"
+                            >
+                              {deletingClassId === cls.id ? 'Menghapus...' : 'Ya, Hapus Kelas'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteClassId(null)}
+                              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveAssignment(cls)}
+                              disabled={!currentKey || savingClassId === cls.id}
+                              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer disabled:opacity-45 ${
+                                hasChanged
+                                  ? 'bg-[#064E3B] text-[#FAF8F2] hover:bg-[#04392B]'
+                                  : 'border border-[#D4CFC2] bg-white text-slate-700 hover:bg-[#EAE7DC]'
+                              }`}
+                            >
+                              {savingClassId === cls.id
+                                ? 'Menyimpan...'
+                                : hasChanged
+                                ? 'Simpan Wali Kelas'
+                                : 'Terapkan'}
+                            </button>
+
+                            {hasHomeroom && (
+                              <button
+                                type="button"
+                                onClick={() => void handleClearHomeroom(cls)}
+                                disabled={clearingClassId === cls.id}
+                                title="Hapus wali kelas dari kelas ini"
+                                className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border border-amber-200 bg-amber-50/70 text-amber-800 text-xs font-medium hover:bg-amber-100 cursor-pointer disabled:opacity-50"
+                              >
+                                <UserMinus className="w-3.5 h-3.5" />
+                                <span>{clearingClassId === cls.id ? '...' : 'Hapus Wali'}</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFeedback(null);
+                                setConfirmDeleteClassId(cls.id);
+                              }}
+                              title={`Hapus kelas ${cls.name}`}
+                              className="p-2 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

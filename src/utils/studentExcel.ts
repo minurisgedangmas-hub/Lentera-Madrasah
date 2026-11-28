@@ -1,12 +1,13 @@
 import * as XLSX from 'xlsx';
 import { clampString, LIMITS } from '../lib/validation';
-import { SchoolClass, StudentRecord, TeacherGender } from '../types/school';
+import { MIGradeLevel, SchoolClass, StudentRecord, TeacherGender } from '../types/school';
 
 export const STUDENT_EXCEL_HEADERS = [
   'No.',
   'No. Induk',
   'NISN',
   'Nama Lengkap',
+  'NIK',
   'Tempat Lahir',
   'Tanggal Lahir',
   'L/P',
@@ -21,6 +22,7 @@ export interface ParsedStudentInput {
   studentIdNumber: string;
   nisn: string;
   fullName: string;
+  nik: string;
   birthPlace: string;
   birthDate: string;
   gender: TeacherGender;
@@ -90,6 +92,7 @@ type StudentFieldKey =
   | 'studentIdNumber'
   | 'nisn'
   | 'fullName'
+  | 'nik'
   | 'birthPlace'
   | 'birthDate'
   | 'gender'
@@ -116,6 +119,9 @@ function mapStudentHeaderToField(header: string): StudentFieldKey | null {
   ) {
     return 'fullName';
   }
+  if (['nik', 'nomornik', 'nonik', 'niksiswa'].includes(header)) {
+    return 'nik';
+  }
   if (['tempatlahir', 'lempatlahir', 'tmplahir', 'kotalahir'].includes(header)) {
     return 'birthPlace';
   }
@@ -125,7 +131,13 @@ function mapStudentHeaderToField(header: string): StudentFieldKey | null {
   if (['lp', 'jeniskelamin', 'kelamin', 'jk', 'gender'].includes(header)) {
     return 'gender';
   }
-  if (['kelas', 'rombel', 'tingkat', 'namakelas'].includes(header)) {
+  if (
+    header === 'kls' ||
+    header.includes('kelas') ||
+    header.includes('rombel') ||
+    header === 'tingkat' ||
+    header === 'tingkatan'
+  ) {
     return 'className';
   }
   if (header.includes('ayah') || header === 'bapak' || header === 'namaayah' || header === 'namabapak') {
@@ -208,6 +220,84 @@ function normalizeGender(raw: unknown): { value: TeacherGender; valid: boolean }
   return { value: 'Laki-laki', valid: false };
 }
 
+const ROMAN_TO_ARABIC_GRADE: Record<string, string> = {
+  vi: '6',
+  iv: '4',
+  v: '5',
+  iii: '3',
+  ii: '2',
+  i: '1',
+};
+
+const ARABIC_TO_MI_GRADE: Record<string, MIGradeLevel> = {
+  '1': 'I',
+  '2': 'II',
+  '3': 'III',
+  '4': 'IV',
+  '5': 'V',
+  '6': 'VI',
+};
+
+export function normalizeClassKey(raw: string): string {
+  let s = raw.toLowerCase().trim();
+  if (!s) return '';
+  s = s.replace(/^(?:kelas|kls|rombel|tingkat)\s+/i, '').trim();
+  const romanMatch = s.match(/^(vi|iv|iii|ii|i|v)(?=[^a-z]|$|[a-z](?:[^a-z]|$))/i);
+  if (romanMatch) {
+    const mapped = ROMAN_TO_ARABIC_GRADE[romanMatch[1].toLowerCase()];
+    if (mapped) {
+      s = mapped + s.slice(romanMatch[1].length);
+    }
+  }
+  return s.replace(/[^a-z0-9]/g, '');
+}
+
+export function inferGradeLevelFromClassName(raw: string): MIGradeLevel {
+  const key = normalizeClassKey(raw);
+  const digit = key.match(/^([1-6])/)?.[1];
+  if (digit && ARABIC_TO_MI_GRADE[digit]) {
+    return ARABIC_TO_MI_GRADE[digit];
+  }
+  return 'I';
+}
+
+export function formatAutoClassName(raw: string): string {
+  const stripped = raw.replace(/^(?:kelas|kls)\s+/i, '').trim();
+  const base = stripped || raw.trim();
+  if (!base) return '1';
+  return clampString(base, LIMITS.CLASS_NAME_MAX);
+}
+
+export function findMatchingSchoolClass(
+  rawClassName: string,
+  classes: SchoolClass[]
+): SchoolClass | undefined {
+  const trimmed = rawClassName.trim();
+  if (!trimmed || classes.length === 0) return undefined;
+
+  const lower = trimmed.toLowerCase();
+  const exact = classes.find((c) => c.name.toLowerCase() === lower);
+  if (exact) return exact;
+
+  const targetKey = normalizeClassKey(trimmed);
+  if (!targetKey) return undefined;
+
+  const byKey = classes.find((c) => normalizeClassKey(c.name) === targetKey);
+  if (byKey) return byKey;
+
+  if (/^[1-6]$/.test(targetKey)) {
+    const targetGrade = ARABIC_TO_MI_GRADE[targetKey];
+    const gradeMatches = classes.filter(
+      (c) => c.gradeLevel === targetGrade || normalizeClassKey(c.name).startsWith(targetKey)
+    );
+    if (gradeMatches.length === 1) {
+      return gradeMatches[0];
+    }
+  }
+
+  return undefined;
+}
+
 export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
   const wb = XLSX.utils.book_new();
 
@@ -221,6 +311,7 @@ export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
       '1001',
       '3154129001',
       'Aisyah Zahra Putri',
+      '3508124120160001',
       'Gedangmas',
       '2016-04-12',
       'P',
@@ -234,6 +325,7 @@ export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
       '1002',
       '3154129002',
       'Muhammad Fatih Al-Ghifari',
+      '3508122507160002',
       'Gedangmas',
       '2016-07-25',
       'L',
@@ -247,6 +339,7 @@ export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
       '1003',
       '3144129004',
       'Ahmad Rayyan Pratama',
+      '3508120311150004',
       'Gedangmas',
       '2015-11-03',
       'L',
@@ -263,6 +356,7 @@ export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
     { wch: 14 },
     { wch: 16 },
     { wch: 30 },
+    { wch: 20 },
     { wch: 18 },
     { wch: 16 },
     { wch: 8 },
@@ -272,8 +366,8 @@ export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
     { wch: 40 },
   ];
 
-  // Set No. Induk and NISN cells to text type
-  for (const addr of ['B2', 'B3', 'B4', 'C2', 'C3', 'C4']) {
+  // Set No. Induk, NISN, and NIK cells to text type
+  for (const addr of ['B2', 'B3', 'B4', 'C2', 'C3', 'C4', 'E2', 'E3', 'E4']) {
     if (ws[addr]) {
       ws[addr].t = 's';
     }
@@ -292,6 +386,7 @@ export function downloadStudentExcelTemplate(classes?: SchoolClass[]): void {
     ['No. Induk', 'Nomor Induk Siswa di madrasah (contoh: 1001, format teks agar tidak terpotong)'],
     ['NISN', 'Nomor Induk Siswa Nasional (10 digit angka, contoh: 3154129001)'],
     ['Nama Lengkap', 'Nama lengkap siswa sesuai akta kelahiran (wajib diisi, minimal 2 karakter)'],
+    ['NIK', 'Nomor Induk Kependudukan siswa (16 digit angka sesuai KK/KIA, contoh: 3508124120160001)'],
     ['Tempat Lahir', 'Kota atau kabupaten kelahiran siswa (contoh: Gedangmas / Lumajang)'],
     ['Tanggal Lahir', 'Format YYYY-MM-DD (contoh: 2016-04-12) atau DD/MM/YYYY'],
     ['L/P', 'Jenis kelamin: isi "L" (Laki-laki) atau "P" (Perempuan)'],
@@ -318,6 +413,7 @@ export function exportStudentsToExcel(students: StudentRecord[], madrasahName?: 
       s.studentIdNumber || '-',
       s.nisn,
       s.fullName,
+      s.nik || '-',
       s.birthPlace || '-',
       s.birthDate || '-',
       s.gender === 'Perempuan' ? 'P' : 'L',
@@ -334,6 +430,7 @@ export function exportStudentsToExcel(students: StudentRecord[], madrasahName?: 
     { wch: 14 },
     { wch: 16 },
     { wch: 28 },
+    { wch: 20 },
     { wch: 16 },
     { wch: 14 },
     { wch: 6 },
@@ -508,27 +605,24 @@ export async function parseStudentExcelFile(
     const nisn = rawNisn || (studentIdNumber ? `3150${studentIdNumber}` : String(Date.now()).slice(-8));
 
     const fullName = clampString(String(getVal('fullName') ?? ''), LIMITS.DISPLAY_NAME_MAX);
+    const nik = formatIdentifierCell(getCellObj(columnMap.nik), getVal('nik'));
     const birthPlace = clampString(String(getVal('birthPlace') ?? ''), LIMITS.TEACHER_BIRTH_PLACE_MAX);
     const birthDate = formatExcelDateValue(getVal('birthDate'));
     const genderCheck = normalizeGender(getVal('gender'));
 
     const rawClassName = String(getVal('className') ?? '').trim();
-    let matchedClass: SchoolClass | undefined;
+    let matchedClass = findMatchingSchoolClass(rawClassName, classes);
 
-    if (rawClassName) {
-      const cleanTarget = rawClassName.toLowerCase().replace(/kelas/i, '').trim();
-      matchedClass = classes.find((c) => {
-        const cClean = c.name.toLowerCase().replace(/kelas/i, '').trim();
-        return cClean === cleanTarget || c.name.toLowerCase() === rawClassName.toLowerCase();
-      });
-    }
-
-    if (!matchedClass && classes.length === 1) {
+    if (!matchedClass && !rawClassName && classes.length === 1) {
       matchedClass = classes[0];
     }
 
-    const className = matchedClass ? matchedClass.name : rawClassName || (classes[0]?.name ?? 'Kelas I A');
-    const classId = matchedClass ? matchedClass.id : classes[0]?.id;
+    const className = matchedClass
+      ? matchedClass.name
+      : rawClassName
+      ? formatAutoClassName(rawClassName)
+      : '';
+    const classId = matchedClass ? matchedClass.id : undefined;
 
     const fatherName = clampString(String(getVal('fatherName') ?? ''), LIMITS.PARENT_NAME_MAX);
     const motherName = clampString(String(getVal('motherName') ?? ''), LIMITS.PARENT_NAME_MAX);
@@ -538,8 +632,8 @@ export async function parseStudentExcelFile(
     if (fullName.length < 2) {
       errors.push('Nama lengkap siswa wajib diisi (minimal 2 karakter)');
     }
-    if (classes.length > 0 && !matchedClass && rawClassName) {
-      errors.push(`Kelas "${rawClassName}" tidak cocok dengan daftar kelas di madrasah`);
+    if (!className) {
+      errors.push('Kolom Kelas kosong. Isi nama kelas siswa (contoh: 1A, 2A, IV A)');
     }
 
     rows.push({
@@ -549,6 +643,7 @@ export async function parseStudentExcelFile(
         studentIdNumber,
         nisn,
         fullName,
+        nik,
         birthPlace,
         birthDate,
         gender: genderCheck.value,

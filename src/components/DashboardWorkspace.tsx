@@ -793,44 +793,48 @@ function TeacherOverview({
 
       {/* 4-Column KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-          <p className="text-xs font-medium text-slate-500">Total Siswa</p>
-          <p className="font-mono text-2xl font-bold text-slate-900 tabular-nums mt-1.5">
-            {studentsCount} Siswa
+        <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-[#04231A] border border-emerald-700/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-emerald-200 uppercase tracking-wider">Total Siswa</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-[#F3D88B] tabular-nums mt-2">
+            {studentsCount} <span className="text-sm font-sans font-medium text-emerald-100">Siswa</span>
           </p>
-          <p className="text-xs text-slate-500 mt-1">Peserta didik terdaftar</p>
+          <p className="text-xs text-emerald-300/80 mt-1">Peserta didik terdaftar</p>
         </div>
 
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-          <p className="text-xs font-medium text-slate-500">Rombongan Belajar</p>
-          <p className="font-mono text-2xl font-bold text-[#064E3B] tabular-nums mt-1.5">
-            {classesCount} Kelas
+        <div className="bg-gradient-to-br from-teal-800 via-teal-950 to-[#042018] border border-teal-600/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-teal-200 uppercase tracking-wider">Rombongan Belajar</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-teal-300 tabular-nums mt-2">
+            {classesCount} <span className="text-sm font-sans font-medium text-teal-100">Kelas</span>
           </p>
-          <p className="text-xs text-slate-500 mt-1">Kelas I sampai Kelas VI</p>
+          <p className="text-xs text-teal-300/80 mt-1">Kelas I sampai Kelas VI</p>
         </div>
 
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-          <p className="text-xs font-medium text-slate-500">Laporan Absensi</p>
-          <p className="font-display text-xl font-bold text-[#064E3B] mt-1.5">
+        <div className="bg-gradient-to-br from-cyan-800 via-cyan-950 to-[#041E28] border border-cyan-600/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-cyan-200 uppercase tracking-wider">Laporan Absensi</p>
+          <p className="font-display text-xl sm:text-2xl font-extrabold text-cyan-300 mt-2 truncate">
             {attendanceReportLinksCount > 0
               ? `${attendanceReportLinksCount} Rombel`
               : absensiUrl
               ? 'Terhubung'
               : 'Belum Diatur'}
           </p>
-          <p className="text-xs text-slate-500 mt-1 truncate">
+          <p className="text-xs text-cyan-300/80 mt-1 truncate">
             {attendanceReportLinksCount > 0
               ? 'Link per kelas & rombel'
               : 'Link laporan eksternal'}
           </p>
         </div>
 
-        <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-          <p className="text-xs font-medium text-slate-500">Pengumuman Aktif</p>
-          <p className="font-mono text-2xl font-bold text-slate-900 tabular-nums mt-1.5">
+        <div className="bg-gradient-to-br from-indigo-900 via-blue-950 to-[#091528] border border-indigo-700/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <p className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Pengumuman Aktif</p>
+          <p className="font-mono text-2xl sm:text-3xl font-extrabold text-indigo-300 tabular-nums mt-2">
             {announcements.length}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Agenda &amp; info kegiatan</p>
+          <p className="text-xs text-indigo-300/80 mt-1">Agenda &amp; info kegiatan</p>
         </div>
       </div>
 

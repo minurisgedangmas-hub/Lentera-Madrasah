@@ -20,6 +20,7 @@ import { LIMITS } from '../lib/validation';
 import {
   createStudentRecord,
   deleteStudentRecord,
+  deleteStudentsBatch,
   importStudentsBatch,
   updateStudentProfile,
 } from '../services/schoolService';
@@ -68,7 +69,7 @@ export function StudentManagementView({
   activeSubmenu,
   onChangeSubmenu,
 }: StudentManagementViewProps) {
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Excel Upload & Preview State
@@ -89,6 +90,7 @@ export function StudentManagementView({
   const [studentIdNumber, setStudentIdNumber] = useState('');
   const [nisn, setNisn] = useState('');
   const [fullName, setFullName] = useState('');
+  const [nik, setNik] = useState('');
   const [classId, setClassId] = useState('');
   const [gender, setGender] = useState<TeacherGender>('Laki-laki');
   const [status, setStatus] = useState<StudentStatus>('Aktif');
@@ -103,9 +105,12 @@ export function StudentManagementView({
   const [parentUidsText, setParentUidsText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Inline delete confirmation
+  // Inline delete confirmation & bulk checkbox delete
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [deletingBulk, setDeletingBulk] = useState(false);
 
   // Feedback banner
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -115,6 +120,11 @@ export function StudentManagementView({
       setClassId(classes[0].id);
     }
   }, [classes, classId]);
+
+  useEffect(() => {
+    const existingIds = new Set(students.map((s) => s.id));
+    setSelectedStudentIds((prev) => prev.filter((id) => existingIds.has(id)));
+  }, [students]);
 
   const stats = useMemo(() => {
     const active = students.filter((s) => getStudentStatus(s) === 'Aktif').length;
@@ -147,6 +157,7 @@ export function StudentManagementView({
         if (!q) return true;
         return (
           s.fullName.toLowerCase().includes(q) ||
+          (s.nik || '').toLowerCase().includes(q) ||
           s.nisn.toLowerCase().includes(q) ||
           s.className.toLowerCase().includes(q) ||
           (s.parentName || '').toLowerCase().includes(q) ||
@@ -166,6 +177,7 @@ export function StudentManagementView({
     setStudentIdNumber('');
     setNisn('');
     setFullName('');
+    setNik('');
     setClassId(classes[0]?.id || '');
     setGender('Laki-laki');
     setStatus('Aktif');
@@ -192,6 +204,7 @@ export function StudentManagementView({
     setStudentIdNumber(stu.studentIdNumber || '');
     setNisn(stu.nisn);
     setFullName(stu.fullName);
+    setNik(stu.nik || '');
     setClassId(stu.classId || classes[0]?.id || '');
     setGender(stu.gender || 'Laki-laki');
     setStatus(getStudentStatus(stu));
@@ -241,6 +254,7 @@ export function StudentManagementView({
           studentIdNumber: studentIdNumber.trim(),
           nisn: nisn.trim(),
           fullName: fullName.trim(),
+          nik: nik.trim(),
           schoolClass: targetClass,
           status,
           gender,
@@ -263,6 +277,7 @@ export function StudentManagementView({
           studentIdNumber: studentIdNumber.trim(),
           nisn: nisn.trim(),
           fullName: fullName.trim(),
+          nik: nik.trim(),
           schoolClass: targetClass,
           studentUid: studentUid.trim(),
           parentUids: parsedParentUids,
@@ -292,6 +307,52 @@ export function StudentManagementView({
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const allFilteredSelected =
+    filteredStudents.length > 0 &&
+    filteredStudents.every((s) => selectedStudentIds.includes(s.id));
+
+  const toggleSelectStudent = (studentId: string) => {
+    setConfirmBulkDelete(false);
+    setSelectedStudentIds((prev) =>
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const toggleSelectAllFiltered = () => {
+    setConfirmBulkDelete(false);
+    const filteredIds = filteredStudents.map((s) => s.id);
+    if (allFilteredSelected) {
+      const filteredSet = new Set(filteredIds);
+      setSelectedStudentIds((prev) => prev.filter((id) => !filteredSet.has(id)));
+    } else {
+      setSelectedStudentIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
+  const handleBulkDeleteStudents = async () => {
+    if (!isAdmin || selectedStudentIds.length === 0) return;
+    setDeletingBulk(true);
+    setFeedback(null);
+    try {
+      const deletedCount = await deleteStudentsBatch(selectedStudentIds);
+      setSelectedStudentIds([]);
+      setConfirmBulkDelete(false);
+      setFeedback({
+        type: 'success',
+        text: `${deletedCount} data siswa terpilih berhasil dihapus dari basis data.`,
+      });
+    } catch {
+      setFeedback({
+        type: 'error',
+        text: 'Gagal menghapus data siswa terpilih. Silakan coba lagi.',
+      });
+    } finally {
+      setDeletingBulk(false);
     }
   };
 
@@ -372,7 +433,12 @@ export function StudentManagementView({
     setImportingBatch(true);
     setFeedback(null);
     try {
-      const count = await importStudentsBatch(validRows, firebaseUser.uid, classes);
+      const count = await importStudentsBatch(
+        validRows,
+        firebaseUser.uid,
+        classes,
+        profile?.displayName
+      );
       setPreviewResult(null);
       setSelectedFileName('');
       setFeedback({
@@ -483,7 +549,7 @@ export function StudentManagementView({
                 Daftar Seluruh Siswa Madrasah
               </h1>
               <p className="text-xs sm:text-sm text-[#C6DDD4] mt-1 max-w-2xl">
-                Kelola data induk siswa madrasah secara terstruktur. Unduh templat Excel resmi, isi data sesuai format 11 kolom, lalu unggah untuk impor massal seketika.
+                Kelola data induk siswa madrasah secara terstruktur. Unduh templat Excel resmi, isi data sesuai format {STUDENT_EXCEL_HEADERS.length} kolom, lalu unggah untuk impor massal seketika.
               </p>
             </div>
 
@@ -491,7 +557,7 @@ export function StudentManagementView({
               <button
                 type="button"
                 onClick={() => downloadStudentExcelTemplate(classes)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4A74A] text-[#062C21] text-sm font-semibold hover:bg-[#DFB763] transition-colors whitespace-nowrap cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-sm font-bold shadow-md hover:from-amber-400 hover:to-yellow-400 transition-all transform hover:scale-[1.02] whitespace-nowrap cursor-pointer border border-amber-400"
               >
                 <Download className="w-4 h-4" />
                 <span>Unduh Templat Excel</span>
@@ -501,7 +567,7 @@ export function StudentManagementView({
                 type="button"
                 onClick={handleTriggerFileUpload}
                 disabled={parsingFile}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#2C6B57] bg-[#0B3A2C] text-[#FAF8F2] text-sm font-medium hover:bg-[#104A39] transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold shadow-md hover:from-emerald-500 hover:to-teal-500 transition-all transform hover:scale-[1.02] whitespace-nowrap cursor-pointer disabled:opacity-60 border border-emerald-500"
               >
                 <Upload className="w-4 h-4" />
                 <span>{parsingFile ? 'Membaca Excel...' : 'Upload Excel Siswa'}</span>
@@ -511,7 +577,7 @@ export function StudentManagementView({
                 type="button"
                 onClick={() => exportStudentsToExcel(filteredStudents, madrasahName)}
                 disabled={filteredStudents.length === 0}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#2C6B57] bg-[#0F533F] text-[#FAF8F2] text-sm font-medium hover:bg-[#14644C] transition-colors whitespace-nowrap cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-semibold shadow-md hover:from-cyan-500 hover:to-blue-500 transition-all transform hover:scale-[1.02] whitespace-nowrap cursor-pointer disabled:opacity-50 border border-cyan-500"
               >
                 <Download className="w-4 h-4" />
                 <span>Ekspor Excel (.xlsx)</span>
@@ -520,7 +586,7 @@ export function StudentManagementView({
               <button
                 type="button"
                 onClick={handleOpenAddForm}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#2C6B57] bg-[#0B3A2C] text-[#FAF8F2] text-sm font-medium hover:bg-[#104A39] transition-colors whitespace-nowrap cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold shadow-md hover:from-violet-500 hover:to-purple-500 transition-all transform hover:scale-[1.02] whitespace-nowrap cursor-pointer border border-violet-500"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>Tambah Manual</span>
@@ -563,7 +629,7 @@ export function StudentManagementView({
                   ))}
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Unduh templat resmi agar seluruh 11 kolom tersusun rapi: <span className="font-semibold text-slate-900">No, No. Induk, NISN, Nama Lengkap, Tempat Lahir, Tanggal Lahir, L/P, Kelas, Nama Ayah, Nama Ibu, Alamat</span>. Tanggal lahir dapat diisi format <span className="font-mono font-medium text-slate-800">YYYY-MM-DD</span> atau tanggal standar Excel; kolom L/P diisi <span className="font-medium text-slate-800">L / P</span>; kolom Kelas diisi rombel madrasah seperti <span className="font-medium text-slate-800">{classes.map((c) => c.name).join(', ') || 'IV A'}</span>.
+                  Unduh templat resmi agar seluruh {STUDENT_EXCEL_HEADERS.length} kolom tersusun rapi: <span className="font-semibold text-slate-900">No, No. Induk, NISN, Nama Lengkap, NIK, Tempat Lahir, Tanggal Lahir, L/P, Kelas, Nama Ayah, Nama Ibu, Alamat</span>. Tanggal lahir dapat diisi format <span className="font-mono font-medium text-slate-800">YYYY-MM-DD</span> atau tanggal standar Excel; kolom L/P diisi <span className="font-medium text-slate-800">L / P</span>; kolom Kelas diisi rombel madrasah seperti <span className="font-medium text-slate-800">{classes.map((c) => c.name).join(', ') || 'IV A'}</span>.
                 </p>
               </div>
             )}
@@ -620,6 +686,7 @@ export function StudentManagementView({
                       <th className="px-3 py-2.5 whitespace-nowrap">No. Induk</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">NISN</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">Nama Lengkap</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap">NIK</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">Tempat Lahir</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">Tanggal Lahir</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">L/P</th>
@@ -651,6 +718,9 @@ export function StudentManagementView({
                         <td className="px-3 py-2.5 font-semibold text-slate-900 whitespace-nowrap">
                           {row.data.fullName || '-'}
                         </td>
+                        <td className="px-3 py-2.5 font-mono tabular-nums text-slate-700 whitespace-nowrap">
+                          {row.data.nik || '-'}
+                        </td>
                         <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">
                           {row.data.birthPlace || '-'}
                         </td>
@@ -661,7 +731,12 @@ export function StudentManagementView({
                           {row.data.gender === 'Perempuan' ? 'P' : 'L'}
                         </td>
                         <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">
-                          {row.data.className || '-'}
+                          <span>{row.data.className || '-'}</span>
+                          {row.data.className && !row.data.classId && (
+                            <span className="ml-1.5 text-[10px] font-normal text-[#064E3B]">
+                              (kelas baru)
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-slate-800 whitespace-nowrap">
                           {row.data.fatherName || '-'}
@@ -721,36 +796,40 @@ export function StudentManagementView({
 
           {/* 4-Column KPI Strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-              <p className="text-xs font-medium text-slate-500">Total Data Siswa</p>
-              <p className="font-mono text-2xl font-bold text-slate-900 tabular-nums mt-1.5">
-                {stats.total} Siswa
+            <div className="bg-gradient-to-br from-emerald-900 via-emerald-950 to-[#04231A] border border-emerald-700/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-emerald-200 uppercase tracking-wider">Total Data Siswa</p>
+              <p className="font-mono text-2xl sm:text-3xl font-extrabold text-[#F3D88B] tabular-nums mt-2">
+                {stats.total} <span className="text-sm font-sans font-medium text-emerald-100">Siswa</span>
               </p>
-              <p className="text-xs text-slate-500 mt-1">Seluruh status tercatat</p>
+              <p className="text-xs text-emerald-300/80 mt-1">Seluruh status tercatat</p>
             </div>
 
-            <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-              <p className="text-xs font-medium text-slate-500">Siswa Aktif</p>
-              <p className="font-mono text-2xl font-bold text-[#064E3B] tabular-nums mt-1.5">
+            <div className="bg-gradient-to-br from-teal-800 via-teal-950 to-[#042018] border border-teal-600/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-teal-200 uppercase tracking-wider">Siswa Aktif</p>
+              <p className="font-mono text-2xl sm:text-3xl font-extrabold text-teal-300 tabular-nums mt-2">
                 {stats.active}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Aktif belajar di kelas MI</p>
+              <p className="text-xs text-teal-300/80 mt-1">Aktif belajar di kelas MI</p>
             </div>
 
-            <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-              <p className="text-xs font-medium text-slate-500">Mutasi Keluar</p>
-              <p className="font-mono text-2xl font-bold text-amber-700 tabular-nums mt-1.5">
+            <div className="bg-gradient-to-br from-amber-800 via-amber-950 to-[#2A1804] border border-amber-600/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-amber-200 uppercase tracking-wider">Mutasi Keluar</p>
+              <p className="font-mono text-2xl sm:text-3xl font-extrabold text-amber-300 tabular-nums mt-2">
                 {stats.mutasiKeluar}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Pindah ke sekolah lain</p>
+              <p className="text-xs text-amber-300/80 mt-1">Pindah ke sekolah lain</p>
             </div>
 
-            <div className="bg-[#FCFBF8] border border-[#DDD9CE] rounded-xl p-5">
-              <p className="text-xs font-medium text-slate-500">Alumni Lulusan</p>
-              <p className="font-mono text-2xl font-bold text-slate-900 tabular-nums mt-1.5">
+            <div className="bg-gradient-to-br from-indigo-900 via-blue-950 to-[#091528] border border-indigo-700/50 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Alumni Lulusan</p>
+              <p className="font-mono text-2xl sm:text-3xl font-extrabold text-indigo-300 tabular-nums mt-2">
                 {stats.alumni}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Tamat jenjang MI</p>
+              <p className="text-xs text-indigo-300/80 mt-1">Tamat jenjang MI</p>
             </div>
           </div>
 
@@ -826,6 +905,20 @@ export function StudentManagementView({
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Nama lengkap sesuai akta kelahiran"
                     className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    NIK
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={LIMITS.NIK_MAX}
+                    value={nik}
+                    onChange={(e) => setNik(e.target.value)}
+                    placeholder="Contoh: 3508124120160001"
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white font-mono text-sm text-slate-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-700"
                   />
                 </div>
 
@@ -1032,7 +1125,7 @@ export function StudentManagementView({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari nama, NISN, orang tua..."
+                    placeholder="Cari nama, NIK, NISN, orang tua..."
                     className="pl-9 pr-3 py-1.5 rounded-lg border border-[#D4CFC2] bg-white text-xs sm:text-sm text-slate-900 w-56"
                   />
                 </div>
@@ -1063,14 +1156,79 @@ export function StudentManagementView({
               </div>
             </div>
 
+            {isAdmin && selectedStudentIds.length > 0 && (
+              <div className="px-5 py-3 border-b border-red-200/80 bg-red-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-red-900">
+                  <span>{selectedStudentIds.length} siswa ditandai untuk dihapus</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {confirmBulkDelete ? (
+                    <>
+                      <span className="text-xs font-medium text-red-800">
+                        Yakin hapus {selectedStudentIds.length} data siswa?
+                      </span>
+                      <button
+                        type="button"
+                        disabled={deletingBulk}
+                        onClick={() => void handleBulkDeleteStudents()}
+                        className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 cursor-pointer disabled:opacity-50"
+                      >
+                        {deletingBulk ? 'Menghapus...' : `Ya, Hapus ${selectedStudentIds.length} Siswa`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={deletingBulk}
+                        onClick={() => setConfirmBulkDelete(false)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStudentIds([])}
+                        className="px-3 py-1.5 rounded-lg border border-[#D4CFC2] bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      >
+                        Batal Pilih
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmBulkDelete(true)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus Terpilih ({selectedStudentIds.length})</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
                  <thead>
                   <tr className="bg-[#FAF9F5] border-b border-[#EAE6DB] text-slate-600 text-xs font-semibold">
+                    {isAdmin && (
+                      <th className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={toggleSelectAllFiltered}
+                          disabled={filteredStudents.length === 0}
+                          aria-label="Pilih semua siswa"
+                          title="Tandai semua siswa yang tampil"
+                          className="rounded border-slate-300 text-[#064E3B] cursor-pointer"
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-3 whitespace-nowrap">No.</th>
                     <th className="px-4 py-3 whitespace-nowrap">No. Induk</th>
                     <th className="px-4 py-3 whitespace-nowrap">NISN</th>
                     <th className="px-4 py-3 whitespace-nowrap">Nama Lengkap</th>
+                    <th className="px-4 py-3 whitespace-nowrap">NIK</th>
                     <th className="px-4 py-3 whitespace-nowrap">Tempat Lahir</th>
                     <th className="px-4 py-3 whitespace-nowrap">Tanggal Lahir</th>
                     <th className="px-4 py-3 whitespace-nowrap">L/P</th>
@@ -1084,7 +1242,7 @@ export function StudentManagementView({
                 <tbody className="divide-y divide-[#EFECE2]">
                   {filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-10 text-center text-slate-500">
+                      <td colSpan={isAdmin ? 14 : 13} className="py-10 text-center text-slate-500">
                         Belum ada data siswa yang sesuai dengan filter pencarian.
                       </td>
                     </tr>
@@ -1096,9 +1254,28 @@ export function StudentManagementView({
                           : stu.gender === 'Laki-laki'
                           ? 'L'
                           : '-';
+                      const isChecked = selectedStudentIds.includes(stu.id);
 
                       return (
-                        <tr key={stu.id} className="hover:bg-[#F5F3EC]/70">
+                        <tr
+                          key={stu.id}
+                          className={
+                            isChecked
+                              ? 'bg-red-50/40 hover:bg-red-50/60'
+                              : 'hover:bg-[#F5F3EC]/70'
+                          }
+                        >
+                          {isAdmin && (
+                            <td className="px-4 py-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleSelectStudent(stu.id)}
+                                aria-label={`Pilih ${stu.fullName}`}
+                                className="rounded border-slate-300 text-[#064E3B] cursor-pointer"
+                              />
+                            </td>
+                          )}
                           <td className="px-4 py-3 font-mono text-xs tabular-nums text-slate-500">
                             {idx + 1}
                           </td>
@@ -1115,6 +1292,9 @@ export function StudentManagementView({
                                 Pindahan dari {stu.previousSchool}
                               </p>
                             )}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs tabular-nums text-slate-600 whitespace-nowrap">
+                            {stu.nik || '-'}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">
                             {stu.birthPlace || '-'}

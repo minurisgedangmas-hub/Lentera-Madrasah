@@ -55,6 +55,7 @@ interface AuthContextValue {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -231,7 +232,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         );
       } catch (err) {
-        setAuthError(err instanceof Error ? err.message : 'Gagal memuat profil pengguna.');
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        let msg = rawMsg;
+        if (rawMsg.includes('network-request-failed') || rawMsg.includes('network') || rawMsg.includes('offline')) {
+          msg = 'Koneksi jaringan ke server terganggu atau offline. Anda dapat terus menjelajahi portal.';
+        } else if (rawMsg.includes('auth/')) {
+          msg = 'Gagal memuat autentikasi pengguna. Periksa koneksi internet Anda.';
+        } else {
+          msg = 'Gagal memuat profil pengguna.';
+        }
+        setAuthError(msg);
         setAuthReady(true);
       }
     });
@@ -247,8 +257,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal masuk dengan Google.';
-      if (!msg.includes('popup-closed-by-user')) {
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      if (!rawMsg.includes('popup-closed-by-user')) {
+        let msg = rawMsg;
+        if (rawMsg.includes('network-request-failed') || rawMsg.includes('network') || rawMsg.includes('offline')) {
+          msg = 'Koneksi jaringan terganggu. Periksa kembali sambungan internet Anda.';
+        } else if (rawMsg.includes('popup-blocked')) {
+          msg = 'Jendela pop-up masuk diblokir oleh browser. Izinkan pop-up untuk situs ini.';
+        } else {
+          msg = 'Gagal masuk dengan Google. Periksa koneksi atau coba beberapa saat lagi.';
+        }
         setAuthError(msg);
       }
     }
@@ -264,6 +282,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (firebaseUser) {
       await syncUserProfile(firebaseUser);
     }
+  };
+
+  const clearAuthError = () => {
+    setAuthError(null);
   };
 
   const effectiveRole: PortalPreviewMode | 'pending' = !profile
@@ -285,6 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         signOut,
         refreshProfile,
+        clearAuthError,
       }}
     >
       {children}

@@ -45,7 +45,13 @@ import {
   UserProfile,
   UserRole,
 } from '../types/school';
-import type { ParsedStudentInput } from '../utils/studentExcel';
+import {
+  findMatchingSchoolClass,
+  formatAutoClassName,
+  inferGradeLevelFromClassName,
+  normalizeClassKey,
+  type ParsedStudentInput,
+} from '../utils/studentExcel';
 
 export async function saveMadrasahIdentity(input: {
   namaYayasan: string;
@@ -57,8 +63,26 @@ export async function saveMadrasahIdentity(input: {
   tahunBerdiri: string;
   namaKepalaMadrasah: string;
   logoUrl?: string;
+  heroPhotoUrl?: string;
+  heroBadge?: string;
+  heroTitle?: string;
+  heroSlogan?: string;
+  heroDescription?: string;
+  heroPhotoCaption?: string;
   jadwalPelajaranUrl?: string;
   absensiReportUrl?: string;
+  galeriDriveUrl?: string;
+  agendaContent?: string;
+  programContent?: string;
+  prestasiContent?: string;
+  spmbContent?: string;
+  spmbUrl?: string;
+  kontakPhone?: string;
+  kontakEmail?: string;
+  googleMapsUrl?: string;
+  youtubeUrl?: string;
+  instagramUrl?: string;
+  whatsappUrl?: string;
   adminUid: string;
   adminName: string;
 }) {
@@ -71,18 +95,88 @@ export async function saveMadrasahIdentity(input: {
 
   try {
     const existing = await getDoc(ref);
+    const existingData = existing.exists() ? existing.data() : {};
+
+    const cleanHeroPhotoUrl =
+      input.heroPhotoUrl !== undefined
+        ? clampString(input.heroPhotoUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.heroPhotoUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanHeroBadge =
+      input.heroBadge !== undefined
+        ? clampString(input.heroBadge, 100)
+        : clampString(String(existingData.heroBadge || ''), 100);
+    const cleanHeroTitle =
+      input.heroTitle !== undefined
+        ? clampString(input.heroTitle, 140)
+        : clampString(String(existingData.heroTitle || ''), 140);
+    const cleanHeroSlogan =
+      input.heroSlogan !== undefined
+        ? clampString(input.heroSlogan, 240)
+        : clampString(String(existingData.heroSlogan || ''), 240);
+    const cleanHeroDescription =
+      input.heroDescription !== undefined
+        ? clampString(input.heroDescription, 500)
+        : clampString(String(existingData.heroDescription || ''), 500);
+    const cleanHeroPhotoCaption =
+      input.heroPhotoCaption !== undefined
+        ? clampString(input.heroPhotoCaption, 120)
+        : clampString(String(existingData.heroPhotoCaption || ''), 120);
     const cleanScheduleUrl =
       input.jadwalPelajaranUrl !== undefined
         ? clampString(input.jadwalPelajaranUrl, LIMITS.DRIVE_URL_MAX)
-        : existing.exists()
-        ? clampString(String(existing.data()?.jadwalPelajaranUrl || ''), LIMITS.DRIVE_URL_MAX)
-        : '';
+        : clampString(String(existingData.jadwalPelajaranUrl || ''), LIMITS.DRIVE_URL_MAX);
     const cleanAbsensiReportUrl =
       input.absensiReportUrl !== undefined
         ? clampString(input.absensiReportUrl, LIMITS.DRIVE_URL_MAX)
-        : existing.exists()
-        ? clampString(String(existing.data()?.absensiReportUrl || ''), LIMITS.DRIVE_URL_MAX)
-        : '';
+        : clampString(String(existingData.absensiReportUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanGaleriUrl =
+      input.galeriDriveUrl !== undefined
+        ? clampString(input.galeriDriveUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.galeriDriveUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanAgendaContent =
+      input.agendaContent !== undefined
+        ? clampString(input.agendaContent, LIMITS.CONTENT_TEXT_MAX)
+        : clampString(String(existingData.agendaContent || ''), LIMITS.CONTENT_TEXT_MAX);
+    const cleanProgramContent =
+      input.programContent !== undefined
+        ? clampString(input.programContent, LIMITS.CONTENT_TEXT_MAX)
+        : clampString(String(existingData.programContent || ''), LIMITS.CONTENT_TEXT_MAX);
+    const cleanPrestasiContent =
+      input.prestasiContent !== undefined
+        ? clampString(input.prestasiContent, LIMITS.CONTENT_TEXT_MAX)
+        : clampString(String(existingData.prestasiContent || ''), LIMITS.CONTENT_TEXT_MAX);
+    const cleanSpmbContent =
+      input.spmbContent !== undefined
+        ? clampString(input.spmbContent, LIMITS.CONTENT_TEXT_MAX)
+        : clampString(String(existingData.spmbContent || ''), LIMITS.CONTENT_TEXT_MAX);
+    const cleanSpmbUrl =
+      input.spmbUrl !== undefined
+        ? clampString(input.spmbUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.spmbUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanKontakPhone =
+      input.kontakPhone !== undefined
+        ? clampString(input.kontakPhone, LIMITS.PHONE_MAX)
+        : clampString(String(existingData.kontakPhone || ''), LIMITS.PHONE_MAX);
+    const cleanKontakEmail =
+      input.kontakEmail !== undefined
+        ? clampString(input.kontakEmail, LIMITS.EMAIL_MAX)
+        : clampString(String(existingData.kontakEmail || ''), LIMITS.EMAIL_MAX);
+    const cleanGoogleMapsUrl =
+      input.googleMapsUrl !== undefined
+        ? clampString(input.googleMapsUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.googleMapsUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanYoutubeUrl =
+      input.youtubeUrl !== undefined
+        ? clampString(input.youtubeUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.youtubeUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanInstagramUrl =
+      input.instagramUrl !== undefined
+        ? clampString(input.instagramUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.instagramUrl || ''), LIMITS.DRIVE_URL_MAX);
+    const cleanWhatsappUrl =
+      input.whatsappUrl !== undefined
+        ? clampString(input.whatsappUrl, LIMITS.DRIVE_URL_MAX)
+        : clampString(String(existingData.whatsappUrl || ''), LIMITS.DRIVE_URL_MAX);
 
     const payload = {
       id: 'main',
@@ -95,8 +189,26 @@ export async function saveMadrasahIdentity(input: {
       tahunBerdiri: safeYear,
       namaKepalaMadrasah: clampString(input.namaKepalaMadrasah, LIMITS.HEADMASTER_MAX),
       logoUrl: cleanLogoUrl,
+      heroPhotoUrl: cleanHeroPhotoUrl,
+      heroBadge: cleanHeroBadge,
+      heroTitle: cleanHeroTitle,
+      heroSlogan: cleanHeroSlogan,
+      heroDescription: cleanHeroDescription,
+      heroPhotoCaption: cleanHeroPhotoCaption,
       jadwalPelajaranUrl: cleanScheduleUrl,
       absensiReportUrl: cleanAbsensiReportUrl,
+      galeriDriveUrl: cleanGaleriUrl,
+      agendaContent: cleanAgendaContent,
+      programContent: cleanProgramContent,
+      prestasiContent: cleanPrestasiContent,
+      spmbContent: cleanSpmbContent,
+      spmbUrl: cleanSpmbUrl,
+      kontakPhone: cleanKontakPhone,
+      kontakEmail: cleanKontakEmail,
+      googleMapsUrl: cleanGoogleMapsUrl,
+      youtubeUrl: cleanYoutubeUrl,
+      instagramUrl: cleanInstagramUrl,
+      whatsappUrl: cleanWhatsappUrl,
       isPublic: true,
       updatedBy: input.adminUid,
       updatedByName: clampString(input.adminName || 'Administrator Madrasah', LIMITS.DISPLAY_NAME_MAX),
@@ -268,10 +380,74 @@ export async function assignHomeroomTeacher(input: {
   }
 }
 
+export async function clearHomeroomTeacher(input: {
+  schoolClass: SchoolClass;
+  teacherRecord?: TeacherRecord;
+  syncTeacherPosition?: boolean;
+  linkedUser?: UserProfile;
+  classStudents?: StudentRecord[];
+}) {
+  const path = `classes/${input.schoolClass.id}`;
+  const batch = writeBatch(db);
+
+  batch.update(doc(db, 'classes', input.schoolClass.id), {
+    homeroomTeacherUid: 'unassigned',
+    homeroomTeacherName: 'Belum Ditentukan',
+    updatedAt: serverTimestamp(),
+  });
+
+  if (
+    input.syncTeacherPosition &&
+    input.teacherRecord &&
+    input.teacherRecord.position.toLowerCase().includes('wali kelas')
+  ) {
+    batch.update(doc(db, 'teachers', input.teacherRecord.id), {
+      position: 'Guru Kelas',
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  if (input.linkedUser) {
+    const remainingClassIds = (input.linkedUser.classIds || []).filter(
+      (cid) => cid !== input.schoolClass.id
+    );
+    batch.update(doc(db, 'users', input.linkedUser.uid), {
+      classIds: remainingClassIds,
+      updatedAt: serverTimestamp(),
+    });
+
+    for (const stu of input.classStudents || []) {
+      const remainingTeacherUids = (stu.teacherUids || []).filter(
+        (tid) => tid !== input.linkedUser!.uid
+      );
+      batch.update(doc(db, 'students', stu.id), {
+        teacherUids: remainingTeacherUids,
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
+
+  try {
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteSchoolClass(schoolClass: SchoolClass) {
+  const path = `classes/${schoolClass.id}`;
+  try {
+    await deleteDoc(doc(db, 'classes', schoolClass.id));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
 export async function createStudentRecord(input: {
   studentIdNumber?: string;
   nisn: string;
   fullName: string;
+  nik?: string;
   schoolClass: SchoolClass;
   studentUid?: string;
   parentUids?: string[];
@@ -304,9 +480,10 @@ export async function createStudentRecord(input: {
   try {
     await setDoc(doc(db, 'students', id), {
       id,
-      studentIdNumber: clampString(input.studentIdNumber || '', 30),
+      studentIdNumber: clampString(input.studentIdNumber || '', LIMITS.STUDENT_ID_NUMBER_MAX),
       nisn: nisn.length >= 4 ? nisn : `${nisn}0000`.slice(0, 8),
       fullName,
+      nik: clampString(input.nik || '', LIMITS.NIK_MAX),
       classId: input.schoolClass.id,
       className: input.schoolClass.name,
       studentUid: clampString(input.studentUid || '', LIMITS.ID_MAX),
@@ -346,6 +523,7 @@ export async function updateStudentProfile(
     studentIdNumber?: string;
     nisn: string;
     fullName: string;
+    nik?: string;
     schoolClass: SchoolClass;
     status: StudentStatus;
     gender: TeacherGender;
@@ -367,9 +545,13 @@ export async function updateStudentProfile(
   const nisn = sanitizeIdToken(input.nisn, student.nisn).slice(0, LIMITS.NISN_MAX);
   try {
     await updateDoc(doc(db, 'students', student.id), {
-      studentIdNumber: clampString(input.studentIdNumber || student.studentIdNumber || '', 30),
+      studentIdNumber: clampString(
+        input.studentIdNumber !== undefined ? input.studentIdNumber : student.studentIdNumber || '',
+        LIMITS.STUDENT_ID_NUMBER_MAX
+      ),
       nisn: nisn.length >= 4 ? nisn : student.nisn,
       fullName: clampString(input.fullName, LIMITS.DISPLAY_NAME_MAX),
+      nik: clampString(input.nik !== undefined ? input.nik : student.nik || '', LIMITS.NIK_MAX),
       classId: input.schoolClass.id,
       className: input.schoolClass.name,
       status: input.status,
@@ -407,9 +589,34 @@ export async function deleteStudentRecord(student: StudentRecord) {
   }
 }
 
+export async function deleteStudentsBatch(studentIds: string[]): Promise<number> {
+  const uniqueIds = Array.from(new Set(studentIds.map((id) => id.trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) return 0;
+
+  const CHUNK_SIZE = 400;
+  let deleted = 0;
+
+  try {
+    for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+      const chunk = uniqueIds.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const id of chunk) {
+        batch.delete(doc(db, 'students', id));
+      }
+      await batch.commit();
+      deleted += chunk.length;
+    }
+    return deleted;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, 'students');
+    return deleted;
+  }
+}
+
 export async function recordStudentMutationIn(input: {
   nisn: string;
   fullName: string;
+  nik?: string;
   gender: TeacherGender;
   birthPlace: string;
   birthDate: string;
@@ -436,6 +643,7 @@ export async function recordStudentMutationIn(input: {
     id: studentId,
     nisn: safeNisn,
     fullName: safeName,
+    nik: clampString(input.nik || '', LIMITS.NIK_MAX),
     classId: input.schoolClass.id,
     className: input.schoolClass.name,
     studentUid: '',
@@ -1240,27 +1448,90 @@ export async function seedSampleSchoolData(adminUid: string, adminName: string) 
 export async function importStudentsBatch(
   entries: ParsedStudentInput[],
   adminUid: string,
-  classes: SchoolClass[]
+  classes: SchoolClass[],
+  adminName?: string
 ): Promise<number> {
   if (entries.length === 0) return 0;
   const CHUNK_SIZE = 400;
   let imported = 0;
 
   try {
+    // 1. Ensure any Excel classes not yet registered in Firestore exist before inserting students
+    const availableClasses: SchoolClass[] = [...classes];
+    const missingClassDrafts: Array<{
+      id: string;
+      name: string;
+      gradeLevel: SchoolClass['gradeLevel'];
+    }> = [];
+    const seenMissingKeys = new Set<string>();
+
+    for (const entry of entries) {
+      const rawName = (entry.className || '').trim();
+      if (!rawName) continue;
+      const existing =
+        (entry.classId ? availableClasses.find((c) => c.id === entry.classId) : undefined) ||
+        findMatchingSchoolClass(rawName, availableClasses);
+      if (!existing) {
+        const key = normalizeClassKey(rawName) || rawName.toLowerCase();
+        if (!seenMissingKeys.has(key)) {
+          seenMissingKeys.add(key);
+          const cleanName = formatAutoClassName(rawName);
+          const newId = makeDocId('cls');
+          const gradeLevel = inferGradeLevelFromClassName(cleanName);
+          missingClassDrafts.push({
+            id: newId,
+            name: cleanName,
+            gradeLevel,
+          });
+          availableClasses.push({
+            id: newId,
+            name: cleanName,
+            gradeLevel,
+            homeroomTeacherUid: adminUid,
+            homeroomTeacherName: clampString(adminName || 'Pengelola Madrasah', LIMITS.DISPLAY_NAME_MAX),
+            academicYear: '2026/2027',
+            isActive: true,
+            subjects: ["Al-Qur'an Hadis", 'Fikih', 'Matematika', 'Bahasa Indonesia'],
+            createdBy: adminUid,
+          } as SchoolClass);
+        }
+      }
+    }
+
+    if (missingClassDrafts.length > 0) {
+      const safeHomeroomName = clampString(adminName || 'Pengelola Madrasah', LIMITS.DISPLAY_NAME_MAX);
+      for (let i = 0; i < missingClassDrafts.length; i += CHUNK_SIZE) {
+        const clsChunk = missingClassDrafts.slice(i, i + CHUNK_SIZE);
+        const clsBatch = writeBatch(db);
+        for (const cls of clsChunk) {
+          clsBatch.set(doc(db, 'classes', cls.id), {
+            id: cls.id,
+            name: cls.name,
+            gradeLevel: cls.gradeLevel,
+            homeroomTeacherUid: adminUid,
+            homeroomTeacherName: safeHomeroomName,
+            academicYear: '2026/2027',
+            isActive: true,
+            subjects: ["Al-Qur'an Hadis", 'Fikih', 'Matematika', 'Bahasa Indonesia'],
+            createdBy: adminUid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+        await clsBatch.commit();
+      }
+    }
+
+    // 2. Import students linked to their exact matched or newly created class
     for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
       const chunk = entries.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       for (const entry of chunk) {
         const id = makeDocId('stu');
         const targetClass =
-          classes.find((c) => c.id === entry.classId) ||
-          classes.find(
-            (c) =>
-              c.name.toLowerCase() === entry.className.toLowerCase() ||
-              c.name.toLowerCase().replace(/kelas/i, '').trim() ===
-                entry.className.toLowerCase().replace(/kelas/i, '').trim()
-          ) ||
-          classes[0];
+          (entry.classId ? availableClasses.find((c) => c.id === entry.classId) : undefined) ||
+          findMatchingSchoolClass(entry.className || '', availableClasses) ||
+          availableClasses[0];
 
         const safeNisn = entry.nisn && entry.nisn.length >= 4 ? entry.nisn : `3150${Date.now()}`.slice(0, 10);
         const className = targetClass ? targetClass.name : entry.className || 'Kelas I A';
@@ -1269,9 +1540,10 @@ export async function importStudentsBatch(
 
         batch.set(doc(db, 'students', id), {
           id,
-          studentIdNumber: clampString(entry.studentIdNumber || '', 30),
+          studentIdNumber: clampString(entry.studentIdNumber || '', LIMITS.STUDENT_ID_NUMBER_MAX),
           nisn: safeNisn,
           fullName: clampString(entry.fullName, LIMITS.DISPLAY_NAME_MAX),
+          nik: clampString(entry.nik || '', LIMITS.NIK_MAX),
           classId,
           className,
           studentUid: '',
